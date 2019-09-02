@@ -68,6 +68,7 @@ class CRNFramework(MastersModel):
             root=data_path,
             split="train",
             num_classes=num_classes,
+            should_flip=True,
         )
 
         self.data_loader_train: torch.utils.data.DataLoader = torch.utils.data.DataLoader(
@@ -82,6 +83,7 @@ class CRNFramework(MastersModel):
             root=data_path,
             split="test",
             num_classes=num_classes,
+            should_flip=False,
         )
 
         self.data_loader_test: torch.utils.data.DataLoader = torch.utils.data.DataLoader(
@@ -91,19 +93,20 @@ class CRNFramework(MastersModel):
             num_workers=num_loader_workers,
         )
 
-        self.__data_set_val__ = CRNDataset(
-            max_input_height_width=max_input_height_width,
-            root=data_path,
-            split="val",
-            num_classes=num_classes,
-        )
-
-        self.data_loader_val: torch.utils.data.DataLoader = torch.utils.data.DataLoader(
-            self.__data_set_val__,
-            batch_size=batch_size,
-            shuffle=True,
-            num_workers=num_loader_workers,
-        )
+        # self.__data_set_val__ = CRNDataset(
+        #     max_input_height_width=max_input_height_width,
+        #     root=data_path,
+        #     split="val",
+        #     num_classes=num_classes,
+        #     should_flip=False
+        # )
+        #
+        # self.data_loader_val: torch.utils.data.DataLoader = torch.utils.data.DataLoader(
+        #     self.__data_set_val__,
+        #     batch_size=batch_size,
+        #     shuffle=True,
+        #     num_workers=num_loader_workers,
+        # )
 
     def __set_model__(
         self,
@@ -170,12 +173,16 @@ class CRNFramework(MastersModel):
 
     def load_model(self, model_dir: str, model_snapshot: str = None) -> None:
         if model_snapshot is not None:
-            checkpoint = torch.load(model_dir + model_snapshot, map_location=self.device)
+            checkpoint = torch.load(
+                model_dir + model_snapshot, map_location=self.device
+            )
             self.crn.load_state_dict(checkpoint["model_state_dict"])
             self.loss_net.loss_layer_scales = checkpoint["loss_layer_scales"]
             self.loss_net.loss_layer_history = checkpoint["loss_history"]
         else:
-            checkpoint = torch.load(model_dir + self.model_name, map_location=self.device)
+            checkpoint = torch.load(
+                model_dir + self.model_name, map_location=self.device
+            )
             self.crn.load_state_dict(checkpoint["model_state_dict"])
             self.loss_net.loss_layer_scales = checkpoint["loss_layer_scales"]
             self.loss_net.loss_layer_history = checkpoint["loss_history"]
