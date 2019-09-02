@@ -81,7 +81,7 @@ class CRNFramework(MastersModel):
         self.__data_set_test__ = CRNDataset(
             max_input_height_width=max_input_height_width,
             root=data_path,
-            split="test",
+            split="train",
             num_classes=num_classes,
             should_flip=False,
         )
@@ -356,9 +356,10 @@ class RefinementModule(modules.Module):
         nn.init.constant_(self.conv_1.bias, 0)
 
         self.layer_norm_1 = nn.LayerNorm(
-            RefinementModule.change_output_channel_size(
-                input_height_width, self.output_channel_count
-            )
+            # RefinementModule.change_output_channel_size(
+            #     input_height_width, self.output_channel_count
+            # )
+            torch.Size(input_height_width)
         )
 
         self.conv_2 = nn.Conv2d(
@@ -389,9 +390,10 @@ class RefinementModule(modules.Module):
 
         if not self.is_final_module:
             self.layer_norm_2 = nn.LayerNorm(
-                RefinementModule.change_output_channel_size(
-                    input_height_width, self.output_channel_count
-                )
+                # RefinementModule.change_output_channel_size(
+                #     input_height_width, self.output_channel_count
+                # )
+                torch.Size(input_height_width)
             )
         else:
             self.final_conv = nn.Conv2d(
