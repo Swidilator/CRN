@@ -55,7 +55,7 @@ class CRNFramework(MastersModel):
                 "input_tensor_size": self.input_tensor_size,
                 "num_output_images": num_output_images,
                 "num_inner_channels": num_inner_channels,
-                "history_len": history_len
+                "history_len": history_len,
             }
         )
 
@@ -64,7 +64,7 @@ class CRNFramework(MastersModel):
         return tuple([self.crn])
 
     def __set_data_loader__(
-            self, data_path, batch_size, num_loader_workers, subset_size, settings
+        self, data_path, batch_size, num_loader_workers, subset_size, settings
     ):
         max_input_height_width = settings["max_input_height_width"]
         num_classes: int = settings["num_classes"]
@@ -75,7 +75,7 @@ class CRNFramework(MastersModel):
             split="train",
             num_classes=num_classes,
             should_flip=True,
-            subset_size=subset_size
+            subset_size=subset_size,
         )
 
         self.data_loader_train: torch.utils.data.DataLoader = torch.utils.data.DataLoader(
@@ -105,7 +105,7 @@ class CRNFramework(MastersModel):
             root=data_path,
             split="val",
             num_classes=num_classes,
-            should_flip=False
+            should_flip=False,
         )
 
         self.data_loader_val: torch.utils.data.DataLoader = torch.utils.data.DataLoader(
