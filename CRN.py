@@ -20,55 +20,62 @@ class CRNFramework(MastersModel):
         self,
         device: torch.device,
         data_path: str,
-        input_tensor_size: image_size,
-        max_input_height_width: image_size,
-        num_output_images: int,
-        num_inner_channels: int,
-        num_classes: int,
         batch_size: int,
         num_loader_workers: int,
-        history_len: int,
+        subset_size: int,
+        settings: dict,
     ):
-        super(CRNFramework, self).__init__(device=device)
-        self.batch_size = batch_size
-        self.input_tensor_size = input_tensor_size
+        super(CRNFramework, self).__init__(
+            device, data_path, batch_size, num_loader_workers, subset_size, settings
+        )
+        self.model_name: str = "CRN"
 
-        self.model_name: str = "CRN_Latest.pt"
+        self.input_tensor_size: image_size = settings["input_tensor_size"]
+        max_input_height_width: image_size = settings["max_input_height_width"]
+        num_output_images: int = settings["num_output_images"]
+        num_inner_channels: int = settings["num_inner_channels"]
+        num_classes: int = settings["num_classes"]
+        history_len: int = settings["history_len"]
 
         self.__set_data_loader__(
             data_path,
-            max_input_height_width,
-            num_classes,
             batch_size,
             num_loader_workers,
+            subset_size,
+            settings={
+                "max_input_height_width": max_input_height_width,
+                "num_classes": num_classes,
+            },
         )
+
         self.__set_model__(
-            input_tensor_size,
-            max_input_height_width,
-            num_output_images,
-            num_classes,
-            num_inner_channels,
-            history_len,
+            settings={
+                "max_input_height_width": max_input_height_width,
+                "num_classes": num_classes,
+                "input_tensor_size": self.input_tensor_size,
+                "num_output_images": num_output_images,
+                "num_inner_channels": num_inner_channels,
+                "history_len": history_len
+            }
         )
 
     @property
-    def wandb_trainable_model(self):
-        return self.crn
+    def wandb_trainable_model(self) -> tuple:
+        return tuple([self.crn])
 
     def __set_data_loader__(
-        self,
-        data_path,
-        max_input_height_width,
-        num_classes,
-        batch_size,
-        num_loader_workers,
+            self, data_path, batch_size, num_loader_workers, subset_size, settings
     ):
+        max_input_height_width = settings["max_input_height_width"]
+        num_classes: int = settings["num_classes"]
+
         self.__data_set_train__ = CRNDataset(
             max_input_height_width=max_input_height_width,
             root=data_path,
             split="train",
             num_classes=num_classes,
             should_flip=True,
+            subset_size=subset_size
         )
 
         self.data_loader_train: torch.utils.data.DataLoader = torch.utils.data.DataLoader(
@@ -81,7 +88,7 @@ class CRNFramework(MastersModel):
         self.__data_set_test__ = CRNDataset(
             max_input_height_width=max_input_height_width,
             root=data_path,
-            split="train",
+            split="test",
             num_classes=num_classes,
             should_flip=False,
         )
@@ -93,30 +100,30 @@ class CRNFramework(MastersModel):
             num_workers=num_loader_workers,
         )
 
-        # self.__data_set_val__ = CRNDataset(
-        #     max_input_height_width=max_input_height_width,
-        #     root=data_path,
-        #     split="val",
-        #     num_classes=num_classes,
-        #     should_flip=False
-        # )
-        #
-        # self.data_loader_val: torch.utils.data.DataLoader = torch.utils.data.DataLoader(
-        #     self.__data_set_val__,
-        #     batch_size=batch_size,
-        #     shuffle=True,
-        #     num_workers=num_loader_workers,
-        # )
+        self.__data_set_val__ = CRNDataset(
+            max_input_height_width=max_input_height_width,
+            root=data_path,
+            split="val",
+            num_classes=num_classes,
+            should_flip=False
+        )
 
-    def __set_model__(
-        self,
-        input_tensor_size,
-        max_input_height_width,
-        num_output_images,
-        num_classes,
-        num_inner_channels,
-        history_len,
-    ) -> None:
+        self.data_loader_val: torch.utils.data.DataLoader = torch.utils.data.DataLoader(
+            self.__data_set_val__,
+            batch_size=batch_size,
+            shuffle=True,
+            num_workers=num_loader_workers,
+        )
+
+    def __set_model__(self, settings) -> None:
+
+        input_tensor_size = settings["input_tensor_size"]
+        max_input_height_width = settings["max_input_height_width"]
+        num_output_images = settings["num_output_images"]
+        num_classes = settings["num_classes"]
+        num_inner_channels = settings["num_inner_channels"]
+        history_len = settings["history_len"]
+
         self.crn: CRN = CRN(
             input_tensor_size=input_tensor_size,
             final_image_size=max_input_height_width,
@@ -144,14 +151,9 @@ class CRNFramework(MastersModel):
         )
 
     def save_model(self, model_dir: str, snapshot: bool = False) -> None:
-        localtime: time.localtime() = time.localtime(time.time())
-        model_snapshot: str = "CRN" + "_"
-        model_snapshot = model_snapshot + str(localtime.tm_year) + "_"
-        model_snapshot = model_snapshot + str(localtime.tm_mon) + "_"
-        model_snapshot = model_snapshot + str(localtime.tm_mday) + "_"
-        model_snapshot = model_snapshot + str(localtime.tm_hour) + "_"
-        model_snapshot = model_snapshot + str(localtime.tm_min) + "_"
-        model_snapshot = model_snapshot + str(localtime.tm_sec) + ".pt"
+        super().save_model(model_dir, snapshot)
+
+        model_snapshot: str = self.__get_model_snapshot_name__()
 
         if snapshot:
             torch.save(
@@ -168,10 +170,12 @@ class CRNFramework(MastersModel):
                 "loss_layer_scales": self.loss_net.loss_layer_scales,
                 "loss_history": self.loss_net.loss_layer_history,
             },
-            model_dir + self.model_name,
+            model_dir + self.model_name + "_Latest.pt",
         )
 
     def load_model(self, model_dir: str, model_snapshot: str = None) -> None:
+        super().load_model(model_dir, model_snapshot)
+
         if model_snapshot is not None:
             checkpoint = torch.load(
                 model_dir + model_snapshot, map_location=self.device
@@ -181,7 +185,7 @@ class CRNFramework(MastersModel):
             self.loss_net.loss_layer_history = checkpoint["loss_history"]
         else:
             checkpoint = torch.load(
-                model_dir + self.model_name, map_location=self.device
+                model_dir + self.model_name + "_Latest.pt", map_location=self.device
             )
             self.crn.load_state_dict(checkpoint["model_state_dict"])
             self.loss_net.loss_layer_scales = checkpoint["loss_layer_scales"]
@@ -238,8 +242,8 @@ class CRNFramework(MastersModel):
 
     def eval(self) -> epoch_output:
         self.crn.eval()
-        loss_total: torch.Tensor = torch.Tensor([0.0]).to(self.device)
-        loss_total.requires_grad = False
+        with torch.no_grad():
+            loss_total: torch.Tensor = torch.Tensor([0.0]).to(self.device)
         for batch_idx, (img, msk) in enumerate(self.data_loader_val):
             img: torch.Tensor = img.to(self.device)
             msk: torch.Tensor = msk.to(self.device)
@@ -524,5 +528,5 @@ class CRN(torch.nn.Module):
         for i in range(1, self.num_rms):
             x = self.rms[i]([mask, x])
         # TanH for squeezing outputs to [-1, 1]
-        x = self.tan_h(x).clone()
+        # x = self.tan_h(x).clone()
         return x
