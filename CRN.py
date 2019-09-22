@@ -91,6 +91,7 @@ class CRNFramework(MastersModel):
             split="test",
             num_classes=num_classes,
             should_flip=False,
+            subset_size=0,
         )
 
         self.data_loader_test: torch.utils.data.DataLoader = torch.utils.data.DataLoader(
@@ -106,6 +107,7 @@ class CRNFramework(MastersModel):
             split="val",
             num_classes=num_classes,
             should_flip=False,
+            subset_size=0,
         )
 
         self.data_loader_val: torch.utils.data.DataLoader = torch.utils.data.DataLoader(
