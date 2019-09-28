@@ -86,6 +86,7 @@ class CRNFramework(MastersModel):
             num_classes=num_classes,
             should_flip=True,
             subset_size=subset_size,
+            noise=True,
         )
 
         self.data_loader_train: torch.utils.data.DataLoader = torch.utils.data.DataLoader(
@@ -102,6 +103,7 @@ class CRNFramework(MastersModel):
             num_classes=num_classes,
             should_flip=False,
             subset_size=0,
+            noise=False,
         )
 
         self.data_loader_test: torch.utils.data.DataLoader = torch.utils.data.DataLoader(
@@ -118,6 +120,7 @@ class CRNFramework(MastersModel):
             num_classes=num_classes,
             should_flip=False,
             subset_size=0,
+            noise=False,
         )
 
         self.data_loader_val: torch.utils.data.DataLoader = torch.utils.data.DataLoader(
