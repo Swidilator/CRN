@@ -57,8 +57,12 @@ class PerceptualLossNetwork(modules.Module):
             )
         self.vgg.eval()
         del self.vgg.classifier, self.vgg.avgpool
-        for i in self.vgg.features:
-            i.requires_grad = False
+        # for i in self.vgg.features:
+        #     i.requires_grad = False
+
+        self.softmin = torch.nn.Softmin(dim=0)
+
+        self.norm = torch.nn.modules.normalization
 
         self.loss_layer_numbers: tuple = (2, 7, 12, 21, 30)
 
@@ -106,6 +110,18 @@ class PerceptualLossNetwork(modules.Module):
             result_truth.append(self.vgg.features[num].stored_output)
 
         loss_contributions: List[float] = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+        for img_no in range(num_images):
+            start_channel: int = img_no * num_channels
+            end_channel: int = (img_no + 1) * num_channels
+
+            single_input: torch.Tensor = input[:, start_channel:end_channel, :, :]
+            self.vgg.features(single_input)
+            for num in self.loss_layer_numbers:
+                result_gen.append(self.vgg.features[num].stored_output)
+
+        for img_no in range(num_images):
+            start_channel: int = img_no * num_channels
+            end_channel: int = (img_no + 1) * num_channels
 
             single_input: torch.Tensor = input[:, start_channel:end_channel, :, :]
 
