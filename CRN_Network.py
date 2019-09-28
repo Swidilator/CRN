@@ -68,9 +68,6 @@ class CRN(torch.nn.Module):
 
         self.tan_h = nn.Tanh()
 
-    def __del__(self):
-        del self.rms_list
-
     def forward(self, inputs: list):
         mask: torch.Tensor = inputs[0]
         noise: torch.Tensor = inputs[1]

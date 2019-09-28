@@ -44,23 +44,21 @@ def get_layer_values(
     self: torch.nn.modules.conv.Conv2d, input: tuple, output: torch.Tensor
 ) -> None:
     # input is a tuple of packed inputs
-    # output is a Tensor. output.data is the Tensor we are interested
+    # output is a Tensor. output.data is the Tensor we are interested in
     self.stored_output = output
 
 
 class PerceptualLossNetwork(modules.Module):
     def __init__(self, input_image_size: tuple, history_len: int):
         super(PerceptualLossNetwork, self).__init__()
-
-        self.vgg: torchvision.models.VGG = torchvision.models.vgg19(
-            pretrained=True, progress=True
-        )
+        with torch.no_grad():
+            self.vgg: torchvision.models.VGG = torchvision.models.vgg19(
+                pretrained=True, progress=True
+            )
         self.vgg.eval()
         del self.vgg.classifier, self.vgg.avgpool
         for i in self.vgg.features:
             i.requires_grad = False
-
-        self.norm = torch.nn.modules.normalization
 
         self.loss_layer_numbers: tuple = (2, 7, 12, 21, 30)
 
@@ -75,7 +73,7 @@ class PerceptualLossNetwork(modules.Module):
         for i, num in enumerate(self.loss_layer_numbers):
             self.vgg.features[num].register_forward_hook(get_layer_values)
 
-    def update_lambdas(self):
+    def update_lambdas(self) -> None:
         avg_list: list = [
             self.loss_layer_history[i].mean()
             for i in range(len(self.loss_layer_history))
@@ -91,45 +89,64 @@ class PerceptualLossNetwork(modules.Module):
         input: torch.Tensor = inputs[0]
         truth: torch.Tensor = inputs[1]
 
-        self.vgg.features(input)
+        device = self.vgg.features[0].weight.device
+
+        # img_losses: list = []
+        this_batch_size = input.shape[0]
+        num_channels = 3
+        num_images: int = int(input.shape[1] / num_channels)
+
+        batch_loss = torch.zeros(num_images).float().to(device)
+
+        result_truth: list = []
         result_gen: list = []
-        for i, num in enumerate(self.loss_layer_numbers):
-            result_gen.append(self.vgg.features[num].stored_output)
 
         self.vgg.features(truth)
-        result_truth: list = []
-        for i, num in enumerate(self.loss_layer_numbers):
+        for num in self.loss_layer_numbers:
             result_truth.append(self.vgg.features[num].stored_output)
-
-        device: torch.device = self.vgg.features[0].weight.device
-        total_loss: torch.Tensor = torch.zeros(1).float().to(device)
 
         loss_contributions: List[float] = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
 
-        batch_size = input.shape[0]
-        for b in range(batch_size):
+            single_input: torch.Tensor = input[:, start_channel:end_channel, :, :]
 
-            # TODO Implement correct loss
-            for i in range(len(result_gen)):
-                res: torch.Tensor = (result_truth[i][b] - result_gen[i][b]).norm() * (
-                    1.0 / result_truth[i][b].numel()
-                )
-                # self.loss_layer_history[i].update(res)
-                loss_contributions[i] += res.item()
-                total_loss += res / self.loss_layer_scales[i]
-                del res
+            # result_gen: list = []
+            # self.vgg.features(single_input)
+            # for num in self.loss_layer_numbers:
+            #     result_gen.append(self.vgg.features[num].stored_output)
 
-            input_loss: torch.Tensor = (input[b] - truth[b]).norm() / input[b].numel()
-            # input_loss.requires_grad = False
-            # self.loss_layer_history[-1].update(input_loss)
-            loss_contributions[-1] += input_loss.item()
-            total_loss += input_loss / self.loss_layer_scales[-1]
-            del input_loss
+            for b in range(this_batch_size):
+                # Direct Image comparison
+                input_loss: torch.Tensor = (
+                    truth[b] - single_input[b]
+                ).norm() / single_input[b].numel()
+                loss_contributions[-1] += input_loss.item()
+                batch_loss[img_no] += input_loss / self.loss_layer_scales[-1]
 
-        loss_contributions = [x / batch_size for x in loss_contributions]
+                # VGG feature layer output comparisons
+                for i in range(len(self.loss_layer_numbers)):
+                    res: torch.Tensor = (
+                        result_truth[i][b]
+                        - result_gen[i + img_no * len(self.loss_layer_numbers)][b]
+                    ).norm() * (1.0 / result_truth[i][b].numel())
+                    # self.loss_layer_history[i].update(res)
+                    loss_contributions[i] += res.item()
+                    batch_loss[img_no] += res / self.loss_layer_scales[i]
+
+        del result_gen
+
+        # total loss reduction = mean
+        # img_losses.append(total_loss / batch_size)
+        # total_loss = 0
+        # plt.show()
+        del result_truth
+        # print(batch_loss.detach().cpu().numpy())
+        # min_loss = self.softmin(batch_loss)
+        # print(min_loss.detach().cpu().numpy())
+
+        loss_contributions = [x / this_batch_size for x in loss_contributions]
         for i, val in enumerate(loss_contributions):
             self.loss_layer_history[i].update(val)
 
-        del result_gen, result_truth, loss_contributions
+        del loss_contributions
         # total loss reduction = mean
-        return total_loss / batch_size
+        return batch_loss.sum() / this_batch_size

@@ -16,15 +16,24 @@ class CRNFramework(MastersModel):
         self,
         device: torch.device,
         data_path: str,
-        batch_size: int,
+        batch_size_slice: int,
+        batch_size_total: int,
         num_loader_workers: int,
         subset_size: int,
         settings: dict,
     ):
         super(CRNFramework, self).__init__(
-            device, data_path, batch_size, num_loader_workers, subset_size, settings
+            device,
+            data_path,
+            batch_size_slice,
+            batch_size_total,
+            num_loader_workers,
+            subset_size,
+            settings,
         )
         self.model_name: str = "CRN"
+
+        self.max_data_loader_batch_size: int = 16
 
         self.input_tensor_size: image_size = settings["input_tensor_size"]
         max_input_height_width: image_size = settings["max_input_height_width"]
@@ -35,7 +44,7 @@ class CRNFramework(MastersModel):
 
         self.__set_data_loader__(
             data_path,
-            batch_size,
+            batch_size_total,
             num_loader_workers,
             subset_size,
             settings={
@@ -60,10 +69,15 @@ class CRNFramework(MastersModel):
         return tuple([self.crn])
 
     def __set_data_loader__(
-        self, data_path, batch_size, num_loader_workers, subset_size, settings
+        self, data_path, batch_size_total, num_loader_workers, subset_size, settings
     ):
         max_input_height_width = settings["max_input_height_width"]
         num_classes: int = settings["num_classes"]
+
+        if batch_size_total > 16:
+            batch_size: int = 16
+        else:
+            batch_size: int = batch_size_total
 
         self.__data_set_train__ = CRNDataset(
             max_input_height_width=max_input_height_width,
@@ -117,25 +131,30 @@ class CRNFramework(MastersModel):
 
         input_tensor_size = settings["input_tensor_size"]
         max_input_height_width = settings["max_input_height_width"]
-        num_output_images = settings["num_output_images"]
+        self.num_output_images = settings["num_output_images"]
         num_classes = settings["num_classes"]
         num_inner_channels = settings["num_inner_channels"]
         history_len = settings["history_len"]
 
+        IMAGE_CHANNELS = 3
+
         self.crn: CRN = CRN(
             input_tensor_size=input_tensor_size,
             final_image_size=max_input_height_width,
-            num_output_images=num_output_images,
+            num_output_images=self.num_output_images,
             num_classes=num_classes,
             num_inner_channels=num_inner_channels,
         )
-        IMAGE_CHANNELS = 3
+
+        # self.crn = nn.DataParallel(self.crn, device_ids=device_ids)
         self.crn = self.crn.to(self.device)
 
         self.loss_net: PerceptualLossNetwork = PerceptualLossNetwork(
             (IMAGE_CHANNELS, max_input_height_width[0], max_input_height_width[1]),
             history_len,
         )
+
+        # self.loss_net = nn.DataParallel(self.loss_net, device_ids=device_ids)
         self.loss_net = self.loss_net.to(self.device)
 
         # self.optimizer = torch.optim.SGD(self.crn.parameters(), lr=0.01, momentum=0.9)
@@ -199,45 +218,94 @@ class CRNFramework(MastersModel):
         if update_lambdas:
             self.loss_net.update_lambdas()
 
-        for batch_idx, (img, msk) in enumerate(self.data_loader_train):
+        # Logic for big batch, whereby we have a large value for a batch, but dataloader provides smaller batch
+        mini_batch_per_batch: int = int(
+            self.batch_size_total / self.max_data_loader_batch_size
+        )
+        if mini_batch_per_batch < 1:
+            mini_batch_per_batch = 1
+
+        current_mini_batch: int = 0
+
+        this_batch_size: int = 0
+
+        for batch_idx, (img_total, msk_total) in enumerate(self.data_loader_train):
             self.optimizer.zero_grad()
-            img: torch.Tensor = img.to(self.device)
-            msk: torch.Tensor = msk.to(self.device)
-            this_batch_size: int = msk.shape[0]
+            current_mini_batch += 1
 
-            # noise: torch.Tensor = torch.randn(
-            #     this_batch_size,
-            #     1,
-            #     self.input_tensor_size[0],
-            #     self.input_tensor_size[1],
-            #     device=self.device,
-            # )
-            # noise = noise.to(self.device)
+            if current_mini_batch % mini_batch_per_batch == 0:
+                this_batch_size = 0
 
-            # out: torch.Tensor = self.crn(inputs=(msk, noise, self.batch_size))
-            out: torch.Tensor = self.crn(inputs=(msk, None, self.batch_size))
-
-            img = CRNFramework.__normalise__(img)
-            out = CRNFramework.__normalise__(out)
-
-            loss: torch.Tensor = self.loss_net((out, img))
-            loss.backward()
-            loss_ave += loss.item()
-            loss_total += loss.item()
-            if batch_idx * self.batch_size % 120 == 112:
-                batch_loss_val: float = (loss_ave / this_batch_size) * self.batch_size
-
-                print(
-                    "Batch: {batch}\nLoss: {loss_val}".format(
-                        batch=batch_idx, loss_val=batch_loss_val
-                    )
+            # Number of times the medium batch should be looped over, given the slice size
+            if self.batch_size_total > self.max_data_loader_batch_size:
+                batch_size_loops: int = int(
+                    self.max_data_loader_batch_size / self.batch_size_slice
                 )
-                # WandB logging, if WandB disabled this should skip the logging without error
-                no_except(wandb.log, {"Batch Loss": batch_loss_val})
-                loss_ave = 0.0
-            self.optimizer.step()
+            else:
+                batch_size_loops: int = int(
+                    self.batch_size_total / self.batch_size_slice
+                )
+
+            # Loop over medium batch
+            for i in range(batch_size_loops):
+                img: torch.Tensor = img_total[
+                    i * self.batch_size_slice : (i + 1) * self.batch_size_slice
+                ].to(self.device)
+                msk: torch.Tensor = msk_total[
+                    i * self.batch_size_slice : (i + 1) * self.batch_size_slice
+                ].to(self.device)
+
+                mini_batch_size: int = msk.shape[0]
+                if mini_batch_size == 0:
+                    continue
+                this_batch_size += mini_batch_size
+                # noise: torch.Tensor = torch.randn(
+                #     this_batch_size,
+                #     1,
+                #     self.input_tensor_size[0],
+                #     self.input_tensor_size[1],
+                #     device=self.device,
+                # )
+                # noise = noise.to(self.device)
+
+                # out: torch.Tensor = self.crn(inputs=(msk, noise, self.batch_size))
+                out: torch.Tensor = self.crn(inputs=(msk, None))
+
+                img = CRNFramework.__normalise__(img)
+                out = CRNFramework.__normalise__(out)
+
+                loss: torch.Tensor = self.loss_net((out, img))
+                loss.backward()
+                loss_ave += loss.item()
+                loss_total += loss.item()
+                del msk, img
+                del loss
+
+            if current_mini_batch % mini_batch_per_batch == 0:
+                if (self.batch_size_total > 8) or (
+                    batch_idx * self.batch_size_total % 120 == 112
+                ):
+                    batch_loss_val: float = (
+                        loss_ave / this_batch_size
+                    ) * self.batch_size_total
+
+                    print(
+                        "Batch: {batch}\nLoss: {loss_val}".format(
+                            batch=int(batch_idx / mini_batch_per_batch),
+                            loss_val=batch_loss_val,
+                        )
+                    )
+                    # WandB logging, if WandB disabled this should skip the logging without error
+                    no_except(wandb.log, {"Batch Loss": batch_loss_val})
+                    loss_ave = 0.0
+
+                for i in self.crn.parameters():
+                    i: torch.nn.Parameter = i
+                    i.grad = i.grad / (self.batch_size_total / self.batch_size_slice)
+                # print("Stepping")
+                self.optimizer.step()
             # del loss, msk, noise, img
-            del loss, msk, img
+            del msk_total, img_total
         del loss_ave
         return loss_total, None
 
@@ -257,7 +325,7 @@ class CRNFramework(MastersModel):
             # )
             # noise = noise.to(self.device)
 
-            out: torch.Tensor = self.crn(inputs=(msk, None, self.batch_size))
+            out: torch.Tensor = self.crn(inputs=(msk, None))
 
             img = CRNFramework.__normalise__(img)
             out = CRNFramework.__normalise__(out)
@@ -282,9 +350,15 @@ class CRNFramework(MastersModel):
         for i, val in enumerate(sample_list):
             img, msk = self.__data_set_test__[val]
             msk = msk.to(self.device).unsqueeze(0)
-            img_out: torch.Tensor = self.crn(inputs=(msk, None, self.batch_size))
-            img_out = img_out.cpu()[0]
-            outputs.append(transform(img_out))
+            img_out: torch.Tensor = self.crn(inputs=(msk, None))
+            print(img_out.shape)
+            for img_no in range(self.num_output_images):
+                start_channel: int = img_no * 3
+                end_channel: int = (img_no + 1) * 3
+                img_out_single: torch.Tensor = img_out[
+                    0, start_channel:end_channel
+                ].cpu()
+                outputs.append(transform(img_out_single))
             del img, msk
         return outputs
 
@@ -314,4 +388,3 @@ class CRNFramework(MastersModel):
         else:
             input = CRNFramework.__single_image_normalise__(input, mean, std)
         return input
-
