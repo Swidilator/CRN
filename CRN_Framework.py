@@ -357,7 +357,7 @@ class CRNFramework(MastersModel):
             img, msk = self.__data_set_test__[val]
             msk = msk.to(self.device).unsqueeze(0)
             img_out: torch.Tensor = self.crn(inputs=(msk, None))
-            print(img_out.shape)
+            #print(img_out.shape)
             for img_no in range(self.num_output_images):
                 start_channel: int = img_no * 3
                 end_channel: int = (img_no + 1) * 3
