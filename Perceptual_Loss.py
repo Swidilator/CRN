@@ -52,9 +52,7 @@ class PerceptualLossNetwork(modules.Module):
     def __init__(self, input_image_size: tuple, history_len: int):
         super(PerceptualLossNetwork, self).__init__()
         with torch.no_grad():
-            self.vgg = torchvision.models.vgg19(
-                pretrained=True, progress=True
-            )
+            self.vgg = torchvision.models.vgg19(pretrained=True, progress=True)
         self.vgg.eval()
         del self.vgg.classifier, self.vgg.avgpool
         torch.cuda.empty_cache()
@@ -91,9 +89,21 @@ class PerceptualLossNetwork(modules.Module):
             self.loss_layer_scales[i] = 1.0 / scale_factor
         no_except(wandb.log, {"Loss scales": self.loss_layer_scales})
 
+    @staticmethod
+    def __calculate_loss__(gen: torch.Tensor, truth: torch.Tensor, label: torch.Tensor) -> torch.Tensor:
+        loss = torch.mean(
+            label
+            * torch.mean(
+                (truth - gen).abs(), dim=0, keepdim=True
+            ),
+            dim=(1, 2),
+        )
+        return loss
+
     def forward(self, inputs: tuple):
         input: torch.Tensor = inputs[0]
         truth: torch.Tensor = inputs[1]
+        label: torch.Tensor = inputs[2]
 
         device = self.vgg.features[0].weight.device
 
@@ -101,8 +111,9 @@ class PerceptualLossNetwork(modules.Module):
         this_batch_size = input.shape[0]
         num_channels = 3
         num_images: int = int(input.shape[1] / num_channels)
+        num_label_channels = label.shape[1]
 
-        batch_loss = torch.zeros(num_images).float().to(device)
+        batch_loss = torch.zeros(num_images, num_label_channels).float().to(device)
 
         result_truth: list = []
         result_gen: list = []
@@ -134,21 +145,32 @@ class PerceptualLossNetwork(modules.Module):
 
             for b in range(this_batch_size):
                 # Direct Image comparison
-                input_loss: torch.Tensor = (
-                    truth[b] - single_input[b]
-                ).norm()  # / single_input[b].numel()
+                input_loss: torch.Tensor = PerceptualLossNetwork.__calculate_loss__(
+                    single_input[b], truth[b], label[0]
+                )
+
+                # / single_input[b].numel()
                 # loss_contributions[-1] += input_loss.item()
                 batch_loss[img_no] += input_loss / self.loss_layer_scales[-1]
 
                 # VGG feature layer output comparisons
                 for i in range(len(self.loss_layer_numbers)):
-                    res: torch.Tensor = (
-                        result_truth[i][b]
-                        - result_gen[i + (img_no * len(self.loss_layer_numbers))][b]
-                    ).norm()  # * (1.0 / result_truth[i][b].numel())
+                    label_shape: tuple = tuple(result_truth[i][b].shape[1:])
+                    label_interpolate = torch.nn.functional.interpolate(
+                        input=label, size=label_shape, mode="nearest"
+                    )
+
+                    layer_loss: torch.Tensor = PerceptualLossNetwork.__calculate_loss__(
+                        result_gen[i + (img_no * len(self.loss_layer_numbers))][b],
+                        result_truth[i][b],
+                        label_interpolate[0]
+
+                    )
+
+                    # * (1.0 / result_truth[i][b].numel())
                     # self.loss_layer_history[i].update(res)
                     # loss_contributions[i] += res.item()
-                    batch_loss[img_no] += res / self.loss_layer_scales[i]
+                    batch_loss[img_no] += layer_loss / self.loss_layer_scales[i]
 
         del result_gen
 
@@ -158,10 +180,10 @@ class PerceptualLossNetwork(modules.Module):
         # plt.show()
         del result_truth
         # print(batch_loss.detach().cpu().numpy())
-        min_loss, _ = torch.min(batch_loss, dim=0, keepdim=True)
+        min_loss, _ = torch.min(batch_loss, dim=1)
         # print(min_loss.detach().cpu().numpy())
 
-        total_loss: torch.Tensor = (min_loss * 0.999) + (batch_loss.mean() * 0.001)
+        total_loss: torch.Tensor = (min_loss * 0.999) + (batch_loss.mean(dim=1) * 0.001)
 
         # loss_contributions = [x / this_batch_size for x in loss_contributions]
         # for i, val in enumerate(loss_contributions):

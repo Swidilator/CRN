@@ -280,7 +280,7 @@ class CRNFramework(MastersModel):
                 img = CRNFramework.__normalise__(img)
                 out = CRNFramework.__normalise__(out)
 
-                loss: torch.Tensor = self.loss_net((out, img))
+                loss: torch.Tensor = self.loss_net((out, img, msk))
                 loss.backward()
                 loss_ave += loss.item()
                 loss_total += loss.item()
