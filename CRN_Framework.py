@@ -5,7 +5,7 @@ import random
 import wandb
 
 from Helper_Stuff import *
-from Data_Management import CRNDataset
+from CRN.CRN_Dataset import CRNDataset
 from CRN.Perceptual_Loss import PerceptualLossNetwork
 from CRN.CRN_Network import CRN
 from Training_Framework import MastersModel
@@ -21,6 +21,7 @@ class CRNFramework(MastersModel):
         num_loader_workers: int,
         subset_size: int,
         use_tanh: bool,
+        use_input_noise: bool,
         settings: dict,
     ):
         super(CRNFramework, self).__init__(
@@ -31,6 +32,7 @@ class CRNFramework(MastersModel):
             num_loader_workers,
             subset_size,
             use_tanh,
+            use_input_noise,
             settings,
         )
         self.model_name: str = "CRN"
@@ -49,6 +51,7 @@ class CRNFramework(MastersModel):
             batch_size_total,
             num_loader_workers,
             subset_size,
+            use_input_noise,
             settings={
                 "max_input_height_width": max_input_height_width,
                 "num_classes": num_classes,
@@ -71,7 +74,13 @@ class CRNFramework(MastersModel):
         return tuple([self.crn])
 
     def __set_data_loader__(
-        self, data_path, batch_size_total, num_loader_workers, subset_size, settings
+        self,
+        data_path,
+        batch_size_total,
+        num_loader_workers,
+        subset_size,
+        use_input_noise,
+        settings,
     ):
         max_input_height_width = settings["max_input_height_width"]
         num_classes: int = settings["num_classes"]
@@ -88,7 +97,7 @@ class CRNFramework(MastersModel):
             num_classes=num_classes,
             should_flip=True,
             subset_size=subset_size,
-            noise=True,
+            noise=use_input_noise,
         )
 
         self.data_loader_train: torch.utils.data.DataLoader = torch.utils.data.DataLoader(
@@ -255,16 +264,17 @@ class CRNFramework(MastersModel):
             # Loop over medium batch
             for i in range(batch_size_loops):
                 img: torch.Tensor = img_total[
-                    i * self.batch_size_slice : (i + 1) * self.batch_size_slice
+                    i * self.batch_size_slice: (i + 1) * self.batch_size_slice
                 ].to(self.device)
                 msk: torch.Tensor = msk_total[
-                    i * self.batch_size_slice : (i + 1) * self.batch_size_slice
+                    i * self.batch_size_slice: (i + 1) * self.batch_size_slice
                 ].to(self.device)
 
                 mini_batch_size: int = msk.shape[0]
                 if mini_batch_size == 0:
                     continue
-                this_batch_size += mini_batch_size
+                else:
+                    this_batch_size += mini_batch_size
                 # noise: torch.Tensor = torch.randn(
                 #     this_batch_size,
                 #     1,
@@ -357,7 +367,7 @@ class CRNFramework(MastersModel):
             img, msk = self.__data_set_test__[val]
             msk = msk.to(self.device).unsqueeze(0)
             img_out: torch.Tensor = self.crn(inputs=(msk, None))
-            #print(img_out.shape)
+            # print(img_out.shape)
             for img_no in range(self.num_output_images):
                 start_channel: int = img_no * 3
                 end_channel: int = (img_no + 1) * 3
