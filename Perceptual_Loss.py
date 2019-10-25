@@ -2,11 +2,12 @@ import torch
 import torch.nn as nn
 import torch.nn.modules as modules
 import torchvision
-from Helper_Stuff import *
-import wandb
 
-from torchvision.transforms import Resize
-from copy import copy
+import wandb
+from typing import Tuple, List, Any
+
+# from torchvision.transforms import Resize
+# from copy import copy
 
 
 # class PerceptualDifference(torch.autograd.Function):
@@ -87,7 +88,7 @@ class PerceptualLossNetwork(modules.Module):
         for i, val in enumerate(avg_list):
             scale_factor: float = val / avg_total
             self.loss_layer_scales[i] = 1.0 / scale_factor
-        no_except(wandb.log, {"Loss scales": self.loss_layer_scales})
+        wandb.log({"Loss scales": self.loss_layer_scales})
 
     @staticmethod
     def __calculate_loss__(gen: torch.Tensor, truth: torch.Tensor, label: torch.Tensor) -> torch.Tensor:

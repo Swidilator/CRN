@@ -1,10 +1,10 @@
 import torch
 from torchvision import transforms
-
+from typing import Tuple, List, Any
 import random
 import wandb
 
-from Helper_Stuff import *
+
 from CRN.CRN_Dataset import CRNDataset
 from CRN.Perceptual_Loss import PerceptualLossNetwork
 from CRN.CRN_Network import CRN
@@ -39,8 +39,8 @@ class CRNFramework(MastersModel):
 
         self.max_data_loader_batch_size: int = 16
 
-        self.input_tensor_size: image_size = settings["input_tensor_size"]
-        max_input_height_width: image_size = settings["max_input_height_width"]
+        self.input_tensor_size: Tuple[int, int] = settings["input_tensor_size"]
+        max_input_height_width: Tuple[int, int] = settings["max_input_height_width"]
         num_output_images: int = settings["num_output_images"]
         num_inner_channels: int = settings["num_inner_channels"]
         num_classes: int = settings["num_classes"]
@@ -223,7 +223,7 @@ class CRNFramework(MastersModel):
             self.loss_net.loss_layer_scales = checkpoint["loss_layer_scales"]
             self.loss_net.loss_layer_history = checkpoint["loss_history"]
 
-    def train(self, update_lambdas: bool) -> epoch_output:
+    def train(self, update_lambdas: bool) -> Tuple[float, Any]:
         self.crn.train()
         torch.cuda.empty_cache()
 
@@ -312,7 +312,7 @@ class CRNFramework(MastersModel):
                         )
                     )
                     # WandB logging, if WandB disabled this should skip the logging without error
-                    no_except(wandb.log, {"Batch Loss": batch_loss_val})
+                    wandb.log({"Batch Loss": batch_loss_val})
                     loss_ave = 0.0
 
                 for i in self.crn.parameters():
@@ -325,7 +325,7 @@ class CRNFramework(MastersModel):
         del loss_ave
         return loss_total, None
 
-    def eval(self) -> epoch_output:
+    def eval(self) -> Tuple[float, Any]:
         self.crn.eval()
         with torch.no_grad():
             loss_total: torch.Tensor = torch.Tensor([0.0]).to(self.device)
@@ -351,10 +351,10 @@ class CRNFramework(MastersModel):
             del loss, msk, img
         return loss_total.item(), None
 
-    def sample(self, k: int) -> sample_output:
+    def sample(self, k: int) -> List[Any]:
         self.crn.eval()
         sample_list: list = random.sample(range(len(self.__data_set_test__)), k)
-        outputs: sample_output = []
+        outputs: List[Any] = []
         # noise: torch.Tensor = torch.randn(
         #     1,
         #     1,
