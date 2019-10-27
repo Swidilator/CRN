@@ -20,6 +20,7 @@ class CRNFramework(MastersModel):
         batch_size_total: int,
         num_loader_workers: int,
         subset_size: int,
+        should_flip_train: bool,
         use_tanh: bool,
         use_input_noise: bool,
         settings: dict,
@@ -31,6 +32,7 @@ class CRNFramework(MastersModel):
             batch_size_total,
             num_loader_workers,
             subset_size,
+            should_flip_train,
             use_tanh,
             use_input_noise,
             settings,
@@ -51,6 +53,7 @@ class CRNFramework(MastersModel):
             batch_size_total,
             num_loader_workers,
             subset_size,
+            should_flip_train,
             use_input_noise,
             settings={
                 "max_input_height_width": max_input_height_width,
@@ -79,11 +82,11 @@ class CRNFramework(MastersModel):
         batch_size_total,
         num_loader_workers,
         subset_size,
+        should_flip_train,
         use_input_noise,
         settings,
     ):
         max_input_height_width = settings["max_input_height_width"]
-        num_classes: int = settings["num_classes"]
 
         if batch_size_total > 16:
             batch_size: int = 16
@@ -94,8 +97,7 @@ class CRNFramework(MastersModel):
             max_input_height_width=max_input_height_width,
             root=data_path,
             split="train",
-            num_classes=num_classes,
-            should_flip=True,
+            should_flip=should_flip_train,
             subset_size=subset_size,
             noise=use_input_noise,
         )
@@ -111,7 +113,6 @@ class CRNFramework(MastersModel):
             max_input_height_width=max_input_height_width,
             root=data_path,
             split="test",
-            num_classes=num_classes,
             should_flip=False,
             subset_size=0,
             noise=False,
@@ -128,7 +129,6 @@ class CRNFramework(MastersModel):
             max_input_height_width=max_input_height_width,
             root=data_path,
             split="val",
-            num_classes=num_classes,
             should_flip=False,
             subset_size=0,
             noise=False,
@@ -351,10 +351,10 @@ class CRNFramework(MastersModel):
             del loss, msk, img
         return loss_total.item(), None
 
-    def sample(self, k: int) -> List[Any]:
+    def sample(self, k: int) -> List[Tuple[Any, Any]]:
         self.crn.eval()
         sample_list: list = random.sample(range(len(self.__data_set_test__)), k)
-        outputs: List[Any] = []
+        outputs: List[Tuple[Any, Any]] = []
         # noise: torch.Tensor = torch.randn(
         #     1,
         #     1,
@@ -374,7 +374,7 @@ class CRNFramework(MastersModel):
                 img_out_single: torch.Tensor = img_out[
                     0, start_channel:end_channel
                 ].cpu()
-                outputs.append(transform(img_out_single))
+                outputs.append((transform(img), transform(img_out_single)))
             del img, msk
         return outputs
 
