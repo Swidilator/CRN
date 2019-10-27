@@ -14,13 +14,14 @@ class CRNDataset(Dataset):
         max_input_height_width: tuple,
         root: str,
         split: str,
-        num_classes: int,
         should_flip: bool,
         subset_size: int,
         noise: bool,
     ):
         super(CRNDataset, self).__init__()
-        self.num_classes: int = num_classes
+        self.num_input_classes: int = 34
+        self.num_output_classes: int = 20
+
         self.should_flip: bool = should_flip
         self.subset_size: int = subset_size
         self.noise: bool = noise
@@ -30,6 +31,8 @@ class CRNDataset(Dataset):
         )
 
         self.max_input_height_width = max_input_height_width
+
+        self.indices = torch.tensor([7, 8, 11, 12, 13, 17, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 31, 32, 33])
 
         self.image_resize_transform = transforms.Compose(
             [
@@ -45,7 +48,8 @@ class CRNDataset(Dataset):
                 ),
                 transforms.ToTensor(),
                 transforms.Lambda(lambda x: (x * 255).long()[0]),
-                transforms.Lambda(lambda x: one_hot(x, self.num_classes - 1)),
+                transforms.Lambda(lambda x: one_hot(x, self.num_input_classes)),
+                transforms.Lambda(lambda x: torch.index_select(x, 2, self.indices)),
                 transforms.Lambda(lambda x: x.transpose(0, 2).transpose(1, 2)),
                 transforms.Lambda(lambda x: CRNDataset.__add_remaining_layer__(x)),
                 transforms.Lambda(lambda x: x.float()),
