@@ -2,8 +2,8 @@ import torch
 import torch.nn as nn
 
 from math import log2
+from typing import Tuple, List, Any
 
-from Helper_Stuff import *
 from CRN.Refinement_Module import RefinementModule
 
 
@@ -11,8 +11,8 @@ class CRN(torch.nn.Module):
     def __init__(
         self,
         use_tanh: bool,
-        input_tensor_size: image_size,
-        final_image_size: image_size,
+        input_tensor_size: Tuple[int, int],
+        final_image_size: Tuple[int, int],
         num_output_images: int,
         num_classes: int,
         num_inner_channels: int,
@@ -20,8 +20,8 @@ class CRN(torch.nn.Module):
         super(CRN, self).__init__()
 
         self.use_tanh: bool = use_tanh
-        self.input_tensor_size: image_size = input_tensor_size
-        self.final_image_size: image_size = final_image_size
+        self.input_tensor_size: Tuple[int, int] = input_tensor_size
+        self.final_image_size: Tuple[int, int] = final_image_size
         self.num_output_images: int = num_output_images
         self.num_classes: int = num_classes
         self.num_inner_channels: int = num_inner_channels

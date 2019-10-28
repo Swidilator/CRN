@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
-from Helper_Stuff import *
+
+from typing import Tuple, List, Any
 
 
 class RefinementModule(nn.Module):
