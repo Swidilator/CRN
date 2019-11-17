@@ -54,6 +54,8 @@ class PerceptualLossNetwork(modules.Module):
         super(PerceptualLossNetwork, self).__init__()
         with torch.no_grad():
             self.vgg = torchvision.models.vgg19(pretrained=True, progress=True)
+            for param in self.vgg.features.parameters():
+                param.requires_grad = False
         self.vgg.eval()
         del self.vgg.classifier, self.vgg.avgpool
         torch.cuda.empty_cache()
