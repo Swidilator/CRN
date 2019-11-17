@@ -70,7 +70,7 @@ class CRN(torch.nn.Module):
         if self.use_tanh:
             self.tan_h = nn.Tanh()
 
-    def forward(self, inputs: list):
+    def forward(self, inputs: List[torch.Tensor]):
         mask: torch.Tensor = inputs[0]
         noise: torch.Tensor = inputs[1]
 
