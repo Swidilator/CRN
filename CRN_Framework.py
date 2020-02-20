@@ -16,102 +16,81 @@ class CRNFramework(MastersModel):
         self,
         device: torch.device,
         data_path: str,
+        input_image_height_width: tuple,
         batch_size_slice: int,
         batch_size_total: int,
+        num_classes: int,
         num_loader_workers: int,
         subset_size: int,
         should_flip_train: bool,
         use_tanh: bool,
         use_input_noise: bool,
-        settings: dict,
+        **kwargs,
     ):
         super(CRNFramework, self).__init__(
             device,
             data_path,
+            input_image_height_width,
             batch_size_slice,
             batch_size_total,
+            num_classes,
             num_loader_workers,
             subset_size,
             should_flip_train,
             use_tanh,
             use_input_noise,
-            settings,
         )
         self.model_name: str = "CRN"
 
         self.max_data_loader_batch_size: int = 16
 
-        self.input_tensor_size: Tuple[int, int] = settings["input_tensor_size"]
-        max_input_height_width: Tuple[int, int] = settings["max_input_height_width"]
-        num_output_images: int = settings["num_output_images"]
-        num_inner_channels: int = settings["num_inner_channels"]
-        num_classes: int = settings["num_classes"]
-        history_len: int = settings["history_len"]
+        try:
+            assert "input_tensor_size" in kwargs
+            assert "num_output_images" in kwargs
+            assert "num_inner_channels" in kwargs
+            assert "history_len" in kwargs
+        except AssertionError as e:
+            print("Missing argument: {error}".format(error=e))
 
-        self.__set_data_loader__(
-            data_path,
-            batch_size_total,
-            num_loader_workers,
-            subset_size,
-            should_flip_train,
-            use_input_noise,
-            settings={
-                "max_input_height_width": max_input_height_width,
-                "num_classes": num_classes,
-            },
-        )
+        self.input_tensor_size: tuple = kwargs["input_tensor_size"]
+        self.num_output_images: int = kwargs["num_output_images"]
+        self.num_inner_channels: int = kwargs["num_inner_channels"]
+        self.history_len: int = kwargs["history_len"]
 
-        self.__set_model__(
-            settings={
-                "max_input_height_width": max_input_height_width,
-                "num_classes": num_classes,
-                "input_tensor_size": self.input_tensor_size,
-                "num_output_images": num_output_images,
-                "num_inner_channels": num_inner_channels,
-                "history_len": history_len,
-            }
-        )
+        self.__set_data_loader__()
+
+        self.__set_model__()
 
     @property
     def wandb_trainable_model(self) -> tuple:
-        return tuple([self.crn])
+        return (self.crn,)
 
-    def __set_data_loader__(
-        self,
-        data_path,
-        batch_size_total,
-        num_loader_workers,
-        subset_size,
-        should_flip_train,
-        use_input_noise,
-        settings,
-    ):
-        max_input_height_width = settings["max_input_height_width"]
+    def __set_data_loader__(self, **kwargs):
 
-        if batch_size_total > 16:
+        if self.batch_size_total > 16:
             batch_size: int = 16
         else:
-            batch_size: int = batch_size_total
+            batch_size: int = self.batch_size_total
 
         self.__data_set_train__ = CRNDataset(
-            max_input_height_width=max_input_height_width,
-            root=data_path,
+            max_input_height_width=self.input_image_height_width,
+            root=self.data_path,
             split="train",
-            should_flip=should_flip_train,
-            subset_size=subset_size,
-            noise=use_input_noise,
+            should_flip=self.should_flip_train,
+            subset_size=self.subset_size,
+            noise=self.use_input_noise,
         )
 
         self.data_loader_train: torch.utils.data.DataLoader = torch.utils.data.DataLoader(
             self.__data_set_train__,
             batch_size=batch_size,
             shuffle=True,
-            num_workers=num_loader_workers,
+            num_workers=self.num_loader_workers,
         )
 
         self.__data_set_test__ = CRNDataset(
-            max_input_height_width=max_input_height_width,
-            root=data_path,
+            max_input_height_width=self.input_image_height_width,
+            root=self.data_path,
             split="test",
             should_flip=False,
             subset_size=0,
@@ -122,12 +101,12 @@ class CRNFramework(MastersModel):
             self.__data_set_test__,
             batch_size=batch_size,
             shuffle=True,
-            num_workers=num_loader_workers,
+            num_workers=self.num_loader_workers,
         )
 
         self.__data_set_val__ = CRNDataset(
-            max_input_height_width=max_input_height_width,
-            root=data_path,
+            max_input_height_width=self.input_image_height_width,
+            root=self.data_path,
             split="val",
             should_flip=False,
             subset_size=0,
@@ -138,35 +117,32 @@ class CRNFramework(MastersModel):
             self.__data_set_val__,
             batch_size=batch_size,
             shuffle=True,
-            num_workers=num_loader_workers,
+            num_workers=self.num_loader_workers,
         )
 
-    def __set_model__(self, settings) -> None:
-
-        input_tensor_size = settings["input_tensor_size"]
-        max_input_height_width = settings["max_input_height_width"]
-        self.num_output_images = settings["num_output_images"]
-        num_classes = settings["num_classes"]
-        num_inner_channels = settings["num_inner_channels"]
-        history_len = settings["history_len"]
+    def __set_model__(self, **kwargs) -> None:
 
         IMAGE_CHANNELS = 3
 
         self.crn: CRN = CRN(
             use_tanh=self.use_tanh,
-            input_tensor_size=input_tensor_size,
-            final_image_size=max_input_height_width,
+            input_tensor_size=self.input_tensor_size,
+            final_image_size=self.input_image_height_width,
             num_output_images=self.num_output_images,
-            num_classes=num_classes,
-            num_inner_channels=num_inner_channels,
+            num_classes=self.num_classes,
+            num_inner_channels=self.num_inner_channels,
         )
 
         # self.crn = nn.DataParallel(self.crn, device_ids=device_ids)
         self.crn = self.crn.to(self.device)
 
         self.loss_net: PerceptualLossNetwork = PerceptualLossNetwork(
-            (IMAGE_CHANNELS, max_input_height_width[0], max_input_height_width[1]),
-            history_len,
+            (
+                IMAGE_CHANNELS,
+                self.input_image_height_width[0],
+                self.input_image_height_width[1],
+            ),
+            self.history_len,
         )
 
         # self.loss_net = nn.DataParallel(self.loss_net, device_ids=device_ids)
@@ -264,10 +240,10 @@ class CRNFramework(MastersModel):
             # Loop over medium batch
             for i in range(batch_size_loops):
                 img: torch.Tensor = img_total[
-                    i * self.batch_size_slice: (i + 1) * self.batch_size_slice
+                    i * self.batch_size_slice : (i + 1) * self.batch_size_slice
                 ].to(self.device)
                 msk: torch.Tensor = msk_total[
-                    i * self.batch_size_slice: (i + 1) * self.batch_size_slice
+                    i * self.batch_size_slice : (i + 1) * self.batch_size_slice
                 ].to(self.device)
 
                 mini_batch_size: int = msk.shape[0]
