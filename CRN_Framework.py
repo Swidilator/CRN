@@ -3,6 +3,7 @@ from torchvision import transforms
 from typing import Tuple, List, Any
 import random
 import wandb
+from tqdm import tqdm
 
 
 from CRN.CRN_Dataset import CRNDataset
@@ -220,7 +221,9 @@ class CRNFramework(MastersModel):
 
         this_batch_size: int = 0
 
-        for batch_idx, (img_total, msk_total) in enumerate(self.data_loader_train):
+        for batch_idx, (img_total, msk_total) in enumerate(
+            tqdm(self.data_loader_train)
+        ):
             self.optimizer.zero_grad()
             current_mini_batch += 1
 
