@@ -170,11 +170,11 @@ class CRNFramework(MastersModel):
 
         if epoch >= 0:
             epoch_file_name: str = os.path.join(
-                model_dir, self.model_name, "_Epoch_{epoch}.pt".format(epoch=epoch)
+                model_dir, self.model_name + "_Epoch_{epoch}.pt".format(epoch=epoch)
             )
             torch.save(save_dict, epoch_file_name)
 
-        latest_file_name: str = os.path.join(model_dir, self.model_name, "_Latest.pt")
+        latest_file_name: str = os.path.join(model_dir, self.model_name + "_Latest.pt")
         torch.save(save_dict, latest_file_name)
 
     def load_model(self, model_dir: str, model_snapshot: str = None) -> None:
