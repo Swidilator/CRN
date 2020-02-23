@@ -83,5 +83,7 @@ class CRN(torch.nn.Module):
             for image_no in range(self.num_output_images):
                 start_index: int = image_no * self.__NUM_OUTPUT_IMAGE_CHANNELS__
                 end_index: int = (image_no + 1) * self.__NUM_OUTPUT_IMAGE_CHANNELS__
-                x[:, start_index:end_index] = self.tan_h(x[:, start_index:end_index]).clone()
+                x[:, start_index:end_index] = self.tan_h(
+                    x[:, start_index:end_index]
+                ).clone()
         return x

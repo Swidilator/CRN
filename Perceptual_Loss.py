@@ -93,13 +93,11 @@ class PerceptualLossNetwork(modules.Module):
         wandb.log({"Loss scales": self.loss_layer_scales})
 
     @staticmethod
-    def __calculate_loss__(gen: torch.Tensor, truth: torch.Tensor, label: torch.Tensor) -> torch.Tensor:
+    def __calculate_loss__(
+        gen: torch.Tensor, truth: torch.Tensor, label: torch.Tensor
+    ) -> torch.Tensor:
         loss = torch.mean(
-            label
-            * torch.mean(
-                (truth - gen).abs(), dim=0, keepdim=True
-            ),
-            dim=(1, 2),
+            label * torch.mean((truth - gen).abs(), dim=0, keepdim=True), dim=(1, 2)
         )
         return loss
 
@@ -166,8 +164,7 @@ class PerceptualLossNetwork(modules.Module):
                     layer_loss: torch.Tensor = PerceptualLossNetwork.__calculate_loss__(
                         result_gen[i + (img_no * len(self.loss_layer_numbers))][b],
                         result_truth[i][b],
-                        label_interpolate[0]
-
+                        label_interpolate[0],
                     )
 
                     # * (1.0 / result_truth[i][b].numel())

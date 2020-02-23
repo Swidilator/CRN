@@ -163,10 +163,10 @@ class CRNFramework(MastersModel):
         super().save_model(model_dir)
 
         save_dict: dict = {
-                    "model_state_dict": self.crn.state_dict(),
-                    "loss_layer_scales": self.loss_net.loss_layer_scales,
-                    "loss_history": self.loss_net.loss_layer_history,
-                }
+            "model_state_dict": self.crn.state_dict(),
+            "loss_layer_scales": self.loss_net.loss_layer_scales,
+            "loss_history": self.loss_net.loss_layer_history,
+        }
 
         if epoch >= 0:
             epoch_file_name: str = os.path.join(

@@ -32,7 +32,9 @@ class CRNDataset(Dataset):
 
         self.max_input_height_width = max_input_height_width
 
-        self.indices = torch.tensor([7, 8, 11, 12, 13, 17, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 31, 32, 33])
+        self.indices = torch.tensor(
+            [7, 8, 11, 12, 13, 17, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 31, 32, 33]
+        )
 
         self.image_resize_transform = transforms.Compose(
             [
