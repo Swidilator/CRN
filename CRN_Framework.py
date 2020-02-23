@@ -4,7 +4,7 @@ from typing import Tuple, List, Any
 import random
 import wandb
 from tqdm import tqdm
-
+import os
 
 from CRN.CRN_Dataset import CRNDataset
 from CRN.Perceptual_Loss import PerceptualLossNetwork
@@ -159,28 +159,23 @@ class CRNFramework(MastersModel):
             weight_decay=0,
         )
 
-    def save_model(self, model_dir: str, snapshot: bool = False) -> None:
-        super().save_model(model_dir, snapshot)
+    def save_model(self, model_dir: str, epoch: int = -1) -> None:
+        super().save_model(model_dir)
 
-        model_snapshot: str = self.__get_model_snapshot_name__()
-
-        if snapshot:
-            torch.save(
-                {
+        save_dict: dict = {
                     "model_state_dict": self.crn.state_dict(),
                     "loss_layer_scales": self.loss_net.loss_layer_scales,
                     "loss_history": self.loss_net.loss_layer_history,
-                },
-                model_dir + model_snapshot,
+                }
+
+        if epoch >= 0:
+            epoch_file_name: str = os.path.join(
+                model_dir, self.model_name, "_Epoch_{epoch}.pt".format(epoch=epoch)
             )
-        torch.save(
-            {
-                "model_state_dict": self.crn.state_dict(),
-                "loss_layer_scales": self.loss_net.loss_layer_scales,
-                "loss_history": self.loss_net.loss_layer_history,
-            },
-            model_dir + self.model_name + "_Latest.pt",
-        )
+            torch.save(save_dict, epoch_file_name)
+
+        latest_file_name: str = os.path.join(model_dir, self.model_name, "_Latest.pt")
+        torch.save(save_dict, latest_file_name)
 
     def load_model(self, model_dir: str, model_snapshot: str = None) -> None:
         super().load_model(model_dir, model_snapshot)
