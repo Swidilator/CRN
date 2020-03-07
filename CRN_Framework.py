@@ -195,14 +195,14 @@ class CRNFramework(MastersModel):
             self.loss_net.loss_layer_scales = checkpoint["loss_layer_scales"]
             self.loss_net.loss_layer_history = checkpoint["loss_history"]
 
-    def train(self, update_lambdas: bool) -> Tuple[float, Any]:
+    def train(self, **kwargs) -> Tuple[float, Any]:
         self.crn.train()
         torch.cuda.empty_cache()
 
         loss_ave: float = 0.0
         loss_total: float = 0.0
 
-        if update_lambdas:
+        if "update_lambdas" in kwargs and kwargs["update_lambdas"]:
             self.loss_net.update_lambdas()
 
         # Logic for big batch, whereby we have a large value for a batch, but dataloader provides smaller batch
