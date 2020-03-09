@@ -9,7 +9,7 @@ import os
 from CRN.CRN_Dataset import CRNDataset
 from CRN.Perceptual_Loss import PerceptualLossNetwork
 from CRN.CRN_Network import CRN
-from Training_Framework import MastersModel
+from SupportScripts.Training_Framework import MastersModel
 
 
 class CRNFramework(MastersModel):
