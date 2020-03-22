@@ -27,6 +27,7 @@ class CRNFramework(MastersModel):
         should_flip_train: bool,
         use_tanh: bool,
         use_input_noise: bool,
+        sample_only: bool,
         **kwargs,
     ):
         super(CRNFramework, self).__init__(
@@ -41,6 +42,7 @@ class CRNFramework(MastersModel):
             should_flip_train,
             use_tanh,
             use_input_noise,
+            sample_only,
         )
         self.model_name: str = "CRN"
 
@@ -53,6 +55,7 @@ class CRNFramework(MastersModel):
             assert "history_len" in kwargs
         except AssertionError as e:
             print("Missing argument: {error}".format(error=e))
+            raise SystemExit
 
         self.input_tensor_size: tuple = kwargs["input_tensor_size"]
         self.num_output_images: int = kwargs["num_output_images"]
@@ -167,30 +170,38 @@ class CRNFramework(MastersModel):
         # self.crn = nn.DataParallel(self.crn, device_ids=device_ids)
         self.crn = self.crn.to(self.device)
 
-        self.loss_net: PerceptualLossNetwork = PerceptualLossNetwork(
-            (
-                IMAGE_CHANNELS,
-                self.input_image_height_width[0],
-                self.input_image_height_width[1],
-            ),
-            self.history_len,
-        )
+        if not self.sample_only:
 
-        # self.loss_net = nn.DataParallel(self.loss_net, device_ids=device_ids)
-        self.loss_net = self.loss_net.to(self.device)
+            self.loss_net: PerceptualLossNetwork = PerceptualLossNetwork(
+                (
+                    IMAGE_CHANNELS,
+                    self.input_image_height_width[0],
+                    self.input_image_height_width[1],
+                ),
+                self.history_len,
+            )
 
-        # self.optimizer = torch.optim.SGD(self.crn.parameters(), lr=0.01, momentum=0.9)
+            # self.loss_net = nn.DataParallel(self.loss_net, device_ids=device_ids)
+            self.loss_net = self.loss_net.to(self.device)
 
-        self.optimizer = torch.optim.Adam(
-            self.crn.parameters(),
-            lr=0.0001,
-            betas=(0.9, 0.999),
-            eps=1e-08,
-            weight_decay=0,
-        )
+            # self.optimizer = torch.optim.SGD(self.crn.parameters(), lr=0.01, momentum=0.9)
+
+            self.optimizer = torch.optim.Adam(
+                self.crn.parameters(),
+                lr=0.0001,
+                betas=(0.9, 0.999),
+                eps=1e-08,
+                weight_decay=0,
+            )
 
     def save_model(self, model_dir: str, epoch: int = -1) -> None:
         super().save_model(model_dir)
+
+        try:
+            assert not self.sample_only
+        except AssertionError as e:
+            print("Cannot save model in 'sample_only mode'")
+            raise SystemExit
 
         save_dict: dict = {
             "model_state_dict": self.crn.state_dict(),
@@ -199,6 +210,7 @@ class CRNFramework(MastersModel):
         }
 
         if epoch >= 0:
+            # Todo add support for manager.args["model_save_prefix"]
             epoch_file_name: str = os.path.join(
                 model_dir, self.model_name + "_Epoch_{epoch}.pt".format(epoch=epoch)
             )
@@ -215,15 +227,17 @@ class CRNFramework(MastersModel):
                 os.path.join(model_dir,  model_file_name), map_location=self.device
             )
             self.crn.load_state_dict(checkpoint["model_state_dict"])
-            self.loss_net.loss_layer_scales = checkpoint["loss_layer_scales"]
-            self.loss_net.loss_layer_history = checkpoint["loss_history"]
+            if not self.sample_only:
+                self.loss_net.loss_layer_scales = checkpoint["loss_layer_scales"]
+                self.loss_net.loss_layer_history = checkpoint["loss_history"]
         else:
             checkpoint = torch.load(
                 os.path.join(model_dir, self.model_name + "_Latest.pt"), map_location=self.device
             )
             self.crn.load_state_dict(checkpoint["model_state_dict"])
-            self.loss_net.loss_layer_scales = checkpoint["loss_layer_scales"]
-            self.loss_net.loss_layer_history = checkpoint["loss_history"]
+            if not self.sample_only:
+                self.loss_net.loss_layer_scales = checkpoint["loss_layer_scales"]
+                self.loss_net.loss_layer_history = checkpoint["loss_history"]
 
     def train(self, **kwargs) -> Tuple[float, Any]:
         self.crn.train()
@@ -355,10 +369,9 @@ class CRNFramework(MastersModel):
             del loss, msk, img
         return loss_total.item(), None
 
-    def sample(self, k: int) -> List[Tuple[Any, Any]]:
+    def sample(self, image_number: int, **kwargs: dict) -> dict:
         self.crn.eval()
-        sample_list: list = random.sample(range(len(self.__data_set_test__)), k)
-        outputs: List[Tuple[Any, Any]] = []
+
         # noise: torch.Tensor = torch.randn(
         #     1,
         #     1,
@@ -367,20 +380,28 @@ class CRNFramework(MastersModel):
         #     device=self.device,
         # )
         transform: transforms.ToPILImage = transforms.ToPILImage()
-        for i, val in enumerate(sample_list):
-            img, msk = self.__data_set_test__[val]
-            msk = msk.to(self.device).unsqueeze(0)
-            img_out: torch.Tensor = self.crn(inputs=(msk, None))
-            # print(img_out.shape)
-            for img_no in range(self.num_output_images):
-                start_channel: int = img_no * 3
-                end_channel: int = (img_no + 1) * 3
-                img_out_single: torch.Tensor = img_out[
-                    0, start_channel:end_channel
-                ].cpu()
-                outputs.append((transform(img), transform(img_out_single)))
-            del img, msk
-        return outputs
+
+        original_img, msk = self.__data_set_val__[image_number]
+        msk = msk.to(self.device).unsqueeze(0)
+        img_out: torch.Tensor = self.crn(inputs=(msk, None))
+
+        split_images: list = []
+        # print(img_out.shape)
+        for img_no in range(self.num_output_images):
+            start_channel: int = img_no * 3
+            end_channel: int = (img_no + 1) * 3
+            img_out_single: torch.Tensor = img_out[
+                0, start_channel:end_channel
+            ].cpu()
+            split_images.append(transform(img_out_single))
+
+        # Todo Output colour version of msk
+        output_dict: dict = {
+            "original_img": transform(original_img.squeeze(0).cpu()),
+            "msk": transform(msk.squeeze(0).cpu()),
+            "output_img": (tuple(split_images)[0])
+        }
+        return output_dict
 
     @staticmethod
     def __single_channel_normalise__(
