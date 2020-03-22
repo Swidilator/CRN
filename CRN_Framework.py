@@ -9,7 +9,8 @@ import os
 from CRN.CRN_Dataset import CRNDataset
 from CRN.Perceptual_Loss import PerceptualLossNetwork
 from CRN.CRN_Network import CRN
-from SupportScripts.Training_Framework import MastersModel
+from support_scripts.utils import MastersModel
+from support_scripts.utils import ModelSettingsManager
 
 
 class CRNFramework(MastersModel):
@@ -65,6 +66,35 @@ class CRNFramework(MastersModel):
     @property
     def wandb_trainable_model(self) -> tuple:
         return (self.crn,)
+
+    @classmethod
+    def from_model_settings_manager(cls, manager: ModelSettingsManager) -> 'CRNFramework':
+
+        model_frame_args: dict = {
+            "device": manager.device,
+            "data_path": manager.args["dataset_path"],
+            "input_image_height_width": manager.args["input_image_height_width"],
+            "batch_size_slice": manager.args["batch_size_pair"][0],
+            "batch_size_total": manager.args["batch_size_pair"][1],
+            "num_classes": manager.args["num_classes"],
+            "num_loader_workers": manager.args["num_workers"],
+            "subset_size": manager.args["training_subset"],
+            "should_flip_train": manager.args["flip_training_images"],
+            "use_tanh": not manager.args["no_tanh"],
+            "use_input_noise": manager.args["input_image_noise"],
+            "sample_only": manager.args["sample_only"],
+        }
+
+        settings = {
+            "input_tensor_size": (
+                manager.model_conf["CRN_INPUT_TENSOR_SIZE_HEIGHT"],
+                manager.model_conf["CRN_INPUT_TENSOR_SIZE_WIDTH"],
+            ),
+            "num_output_images": manager.model_conf["CRN_NUM_OUTPUT_IMAGES"],
+            "num_inner_channels": manager.model_conf["CRN_NUM_INNER_CHANNELS"],
+            "history_len": manager.model_conf["CRN_HISTORY_LEN"],
+        }
+        return cls(**model_frame_args, **settings)
 
     def __set_data_loader__(self, **kwargs):
 
