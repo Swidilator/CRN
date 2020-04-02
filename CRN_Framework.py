@@ -5,12 +5,15 @@ import random
 import wandb
 from tqdm import tqdm
 import os
+from PIL import ImageFile
 
 from CRN.CRN_Dataset import CRNDataset
 from CRN.Perceptual_Loss import PerceptualLossNetwork
 from CRN.CRN_Network import CRN
 from support_scripts.utils import MastersModel
 from support_scripts.utils import ModelSettingsManager
+
+ImageFile.LOAD_TRUNCATED_IMAGES = True
 
 
 class CRNFramework(MastersModel):
@@ -71,7 +74,9 @@ class CRNFramework(MastersModel):
         return (self.crn,)
 
     @classmethod
-    def from_model_settings_manager(cls, manager: ModelSettingsManager) -> 'CRNFramework':
+    def from_model_settings_manager(
+        cls, manager: ModelSettingsManager
+    ) -> "CRNFramework":
 
         model_frame_args: dict = {
             "device": manager.device,
@@ -102,9 +107,9 @@ class CRNFramework(MastersModel):
     def __set_data_loader__(self, **kwargs):
 
         if self.batch_size_total > 16:
-            batch_size: int = 16
+            self.medium_batch_size: int = 16
         else:
-            batch_size: int = self.batch_size_total
+            self.medium_batch_size: int = self.batch_size_total
 
         self.__data_set_train__ = CRNDataset(
             max_input_height_width=self.input_image_height_width,
@@ -117,22 +122,6 @@ class CRNFramework(MastersModel):
 
         self.data_loader_train: torch.utils.data.DataLoader = torch.utils.data.DataLoader(
             self.__data_set_train__,
-            batch_size=batch_size,
-            shuffle=True,
-            num_workers=self.num_loader_workers,
-        )
-
-        self.__data_set_test__ = CRNDataset(
-            max_input_height_width=self.input_image_height_width,
-            root=self.data_path,
-            split="test",
-            should_flip=False,
-            subset_size=0,
-            noise=False,
-        )
-
-        self.data_loader_test: torch.utils.data.DataLoader = torch.utils.data.DataLoader(
-            self.__data_set_test__,
             batch_size=batch_size,
             shuffle=True,
             num_workers=self.num_loader_workers,
@@ -156,7 +145,7 @@ class CRNFramework(MastersModel):
 
     def __set_model__(self, **kwargs) -> None:
 
-        IMAGE_CHANNELS = 3
+        num_image_channels = 3
 
         self.crn: CRN = CRN(
             use_tanh=self.use_tanh,
@@ -174,7 +163,7 @@ class CRNFramework(MastersModel):
 
             self.loss_net: PerceptualLossNetwork = PerceptualLossNetwork(
                 (
-                    IMAGE_CHANNELS,
+                    num_image_channels,
                     self.input_image_height_width[0],
                     self.input_image_height_width[1],
                 ),
@@ -200,11 +189,10 @@ class CRNFramework(MastersModel):
         try:
             assert not self.sample_only
         except AssertionError as e:
-            print("Cannot save model in 'sample_only mode'")
-            raise SystemExit
+            raise AssertionError("Cannot save model in 'sample_only mode'")
 
         save_dict: dict = {
-            "model_state_dict": self.crn.state_dict(),
+            "dict_crn": self.crn.state_dict(),
             "loss_layer_scales": self.loss_net.loss_layer_scales,
             "loss_history": self.loss_net.loss_layer_history,
         }
@@ -219,68 +207,52 @@ class CRNFramework(MastersModel):
         latest_file_name: str = os.path.join(model_dir, self.model_name + "_Latest.pt")
         torch.save(save_dict, latest_file_name)
 
-    def load_model(self, model_dir: str, model_file_name: str = None) -> None:
+    def load_model(self, model_dir: str, model_file_name: str) -> None:
         super().load_model(model_dir, model_file_name)
 
-        if model_file_name is not None:
-            checkpoint = torch.load(
-                os.path.join(model_dir,  model_file_name), map_location=self.device
-            )
-            self.crn.load_state_dict(checkpoint["model_state_dict"])
-            if not self.sample_only:
-                self.loss_net.loss_layer_scales = checkpoint["loss_layer_scales"]
-                self.loss_net.loss_layer_history = checkpoint["loss_history"]
-        else:
-            checkpoint = torch.load(
-                os.path.join(model_dir, self.model_name + "_Latest.pt"), map_location=self.device
-            )
-            self.crn.load_state_dict(checkpoint["model_state_dict"])
-            if not self.sample_only:
-                self.loss_net.loss_layer_scales = checkpoint["loss_layer_scales"]
-                self.loss_net.loss_layer_history = checkpoint["loss_history"]
+        checkpoint = torch.load(
+            os.path.join(model_dir, model_file_name), map_location=self.device
+        )
+        self.crn.load_state_dict(checkpoint["dict_crn"])
+        self.loss_net.loss_layer_scales = checkpoint["loss_layer_scales"]
+        self.loss_net.loss_layer_history = checkpoint["loss_history"]
 
     def train(self, **kwargs) -> Tuple[float, Any]:
         self.crn.train()
         torch.cuda.empty_cache()
 
+        current_epoch: int = kwargs["current_epoch"]
+
         loss_ave: float = 0.0
         loss_total: float = 0.0
+
+        # Number of times the medium batch should be looped over, given the slice size
+        mini_batch_per_medium_batch: int = self.medium_batch_size // self.batch_size_slice
+
+        current_big_batch: int = 0
+
+        # Increments as mini batches are processed, should be equal to big batch eventually
+        this_big_batch_size: int = 0
+
+        final_medium_batch: bool = False
 
         if "update_lambdas" in kwargs and kwargs["update_lambdas"]:
             self.loss_net.update_lambdas()
 
-        # Logic for big batch, whereby we have a large value for a batch, but dataloader provides smaller batch
-        mini_batch_per_batch: int = int(
-            self.batch_size_total / self.max_data_loader_batch_size
-        )
-        if mini_batch_per_batch < 1:
-            mini_batch_per_batch = 1
-
-        current_mini_batch: int = 0
-
-        this_batch_size: int = 0
-
         for batch_idx, (img_total, msk_total) in enumerate(
-            tqdm(self.data_loader_train)
+            tqdm(self.data_loader_train, desc="Training")
         ):
-            self.optimizer.zero_grad()
-            current_mini_batch += 1
+            this_medium_batch_size: int = img_total.shape[0]
 
-            if current_mini_batch % mini_batch_per_batch == 0:
-                this_batch_size = 0
-
-            # Number of times the medium batch should be looped over, given the slice size
-            if self.batch_size_total > self.max_data_loader_batch_size:
-                batch_size_loops: int = int(
-                    self.max_data_loader_batch_size / self.batch_size_slice
-                )
-            else:
-                batch_size_loops: int = int(
-                    self.batch_size_total / self.batch_size_slice
-                )
+            if (this_medium_batch_size < self.medium_batch_size) or (
+                (batch_idx + 1) * self.medium_batch_size
+                == len(self.data_loader_train.dataset)
+            ):
+                final_medium_batch = True
+            self.crn.zero_grad()
 
             # Loop over medium batch
-            for i in range(batch_size_loops):
+            for i in range(mini_batch_per_medium_batch):
                 img: torch.Tensor = img_total[
                     i * self.batch_size_slice : (i + 1) * self.batch_size_slice
                 ].to(self.device)
@@ -288,11 +260,16 @@ class CRNFramework(MastersModel):
                     i * self.batch_size_slice : (i + 1) * self.batch_size_slice
                 ].to(self.device)
 
-                mini_batch_size: int = msk.shape[0]
-                if mini_batch_size == 0:
-                    continue
-                else:
-                    this_batch_size += mini_batch_size
+                this_mini_batch_size: int = msk.shape[0]
+
+                # Add the mini batch size to the big batch size
+                this_big_batch_size += this_mini_batch_size
+
+                if (
+                    this_mini_batch_size == 0
+                ):  # Empty mini batch, medium batch is last in epoch
+                    # final_mini_batch = True
+                    break
                 # noise: torch.Tensor = torch.randn(
                 #     this_batch_size,
                 #     1,
@@ -312,33 +289,38 @@ class CRNFramework(MastersModel):
                 loss.backward()
                 loss_ave += loss.item()
                 loss_total += loss.item()
-                del msk, img
-                del loss
+                del msk, img, loss
 
-            if current_mini_batch % mini_batch_per_batch == 0:
-                if (self.batch_size_total > 8) or (
-                    batch_idx * self.batch_size_total % 120 == 112
-                ):
-                    batch_loss_val: float = (
-                        loss_ave / this_batch_size
-                    ) * self.batch_size_total
-
-                    print(
-                        "Batch: {batch}\nLoss: {loss_val}".format(
-                            batch=int(batch_idx / mini_batch_per_batch),
-                            loss_val=batch_loss_val,
-                        )
-                    )
-                    # WandB logging, if WandB disabled this should skip the logging without error
-                    wandb.log({"Batch Loss": batch_loss_val})
-                    loss_ave = 0.0
-
+            if (this_big_batch_size == self.batch_size_total) or final_medium_batch:
+                # print(current_big_batch)
+                i: torch.nn.Parameter
                 for i in self.crn.parameters():
-                    i: torch.nn.Parameter = i
-                    i.grad = i.grad / (self.batch_size_total / self.batch_size_slice)
+                    if i.grad is not None:
+                        i.grad = i.grad / (
+                            self.batch_size_total / self.batch_size_slice
+                        )
                 # print("Stepping")
                 self.optimizer.step()
-            # del loss, msk, noise, img
+
+                # Step big batch count
+                current_big_batch += 1
+
+                # # Normalise this accumulated error
+                # output_scaling_factor: float = (
+                #     this_big_batch_size / self.batch_size_slice
+                # )
+
+                batch_loss_val: float = loss_ave * self.batch_size_total
+
+                wandb.log(
+                    {
+                        "Epoch_Fraction": current_epoch
+                        + (batch_idx / len(self.data_loader_train.dataset)),
+                        "Batch Loss": batch_loss_val,
+                    }
+                )
+                loss_ave = 0.0
+
             del msk_total, img_total
         del loss_ave
         return loss_total, None
@@ -381,8 +363,9 @@ class CRNFramework(MastersModel):
         # )
         transform: transforms.ToPILImage = transforms.ToPILImage()
 
-        original_img, msk = self.__data_set_val__[image_number]
+        (original_img, msk, msk_colour,) = self.__data_set_val__[image_number]
         msk = msk.to(self.device).unsqueeze(0)
+
         img_out: torch.Tensor = self.crn(inputs=(msk, None))
 
         split_images: list = []
@@ -390,17 +373,25 @@ class CRNFramework(MastersModel):
         for img_no in range(self.num_output_images):
             start_channel: int = img_no * 3
             end_channel: int = (img_no + 1) * 3
-            img_out_single: torch.Tensor = img_out[
-                0, start_channel:end_channel
-            ].cpu()
+            img_out_single: torch.Tensor = img_out[0, start_channel:end_channel].cpu()
             split_images.append(transform(img_out_single))
 
-        # Todo Output colour version of msk
-        output_dict: dict = {
-            "original_img": transform(original_img.squeeze(0).cpu()),
-            "msk": transform(msk.squeeze(0).cpu()),
-            "output_img": (tuple(split_images)[0])
+            # Bring images to cpu
+        original_img = original_img.squeeze(0).cpu()
+        msk = msk.squeeze(0).argmax(0, keepdim=True).float().cpu()
+        msk_colour = msk_colour.float().cpu()
+
+        output_img_dict: dict = {
+            "output_img_{i}": transform(img.squeeze(0).cpu())
+            for i, img in enumerate(split_images)
         }
+
+        output_dict: dict = {
+            "original_img": transform(original_img),
+            "msk_colour": transform(msk_colour),
+            **output_img_dict
+        }
+
         return output_dict
 
     @staticmethod
