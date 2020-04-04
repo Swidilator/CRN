@@ -320,6 +320,7 @@ class CRNFramework(MastersModel):
                     }
                 )
                 loss_ave = 0.0
+                this_big_batch_size = 0
 
             del msk_total, img_total
         del loss_ave
