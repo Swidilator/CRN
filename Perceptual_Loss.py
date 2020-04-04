@@ -179,11 +179,11 @@ class PerceptualLossNetwork(modules.Module):
         # total_loss = 0
         # plt.show()
         del result_truth
-        # print(batch_loss.detach().cpu().numpy())
-        min_loss, _ = torch.min(batch_loss, dim=1)
+        #print(batch_loss.detach().cpu().numpy())
+        min_loss, _ = torch.min(batch_loss, dim=0)
         # print(min_loss.detach().cpu().numpy())
 
-        total_loss: torch.Tensor = (min_loss * 0.999) + (batch_loss.mean(dim=1) * 0.001)
+        total_loss: torch.Tensor = (min_loss * 0.999) + (batch_loss.mean(dim=0) * 0.001)
 
         # loss_contributions = [x / this_batch_size for x in loss_contributions]
         # for i, val in enumerate(loss_contributions):
@@ -191,4 +191,4 @@ class PerceptualLossNetwork(modules.Module):
 
         del loss_contributions
         # total loss reduction = mean
-        return total_loss / this_batch_size
+        return torch.sum(total_loss / this_batch_size)
