@@ -122,7 +122,7 @@ class CRNFramework(MastersModel):
 
         self.data_loader_train: torch.utils.data.DataLoader = torch.utils.data.DataLoader(
             self.__data_set_train__,
-            batch_size=batch_size,
+            batch_size=self.batch_size_slice,
             shuffle=True,
             num_workers=self.num_loader_workers,
         )
@@ -138,7 +138,7 @@ class CRNFramework(MastersModel):
 
         self.data_loader_val: torch.utils.data.DataLoader = torch.utils.data.DataLoader(
             self.__data_set_val__,
-            batch_size=batch_size,
+            batch_size=self.batch_size_slice,
             shuffle=True,
             num_workers=self.num_loader_workers,
         )
@@ -239,7 +239,7 @@ class CRNFramework(MastersModel):
         if "update_lambdas" in kwargs and kwargs["update_lambdas"]:
             self.loss_net.update_lambdas()
 
-        for batch_idx, (img_total, msk_total) in enumerate(
+        for batch_idx, (img_total, msk_total, _) in enumerate(
             tqdm(self.data_loader_train, desc="Training")
         ):
             this_medium_batch_size: int = img_total.shape[0]
@@ -382,7 +382,7 @@ class CRNFramework(MastersModel):
         msk_colour = msk_colour.float().cpu()
 
         output_img_dict: dict = {
-            "output_img_{i}": transform(img.squeeze(0).cpu())
+            "output_img_{i}".format(i=i): img
             for i, img in enumerate(split_images)
         }
 
