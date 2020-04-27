@@ -388,6 +388,7 @@ class CRNFramework(MastersModel):
         }
 
         output_dict: dict = {
+            "image_index": image_number,
             "original_img": transform(original_img),
             "msk_colour": transform(msk_colour),
             "output_img_dict": output_img_dict
