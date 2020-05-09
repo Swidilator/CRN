@@ -56,6 +56,9 @@ class CRNFramework(MastersModel):
             assert "num_output_images" in kwargs
             assert "num_inner_channels" in kwargs
             assert "history_len" in kwargs
+            assert "perceptual_base_model" in kwargs
+            assert "use_feature_encodings" in kwargs
+            assert "use_loss_output_image" in kwargs
         except AssertionError as e:
             print("Missing argument: {error}".format(error=e))
             raise SystemExit
@@ -64,6 +67,9 @@ class CRNFramework(MastersModel):
         self.num_output_images: int = kwargs["num_output_images"]
         self.num_inner_channels: int = kwargs["num_inner_channels"]
         self.history_len: int = kwargs["history_len"]
+        self.perceptual_base_model: str = kwargs["perceptual_base_model"]
+        self.use_feature_encodings: bool = kwargs["use_feature_encodings"]
+        self.use_loss_output_image: bool = kwargs["use_loss_output_image"]
 
         self.__set_data_loader__()
 
@@ -101,6 +107,9 @@ class CRNFramework(MastersModel):
             "num_output_images": manager.model_conf["CRN_NUM_OUTPUT_IMAGES"],
             "num_inner_channels": manager.model_conf["CRN_NUM_INNER_CHANNELS"],
             "history_len": manager.model_conf["CRN_HISTORY_LEN"],
+            "perceptual_base_model": manager.model_conf["CRN_PERCEPTUAL_BASE_MODEL"],
+            "use_feature_encodings": manager.model_conf["CRN_USE_FEATURE_ENCODINGS"],
+            "use_loss_output_image": manager.model_conf["CRN_USE_LOSS_OUTPUT_IMAGE"],
         }
         return cls(**model_frame_args, **settings)
 
@@ -162,12 +171,10 @@ class CRNFramework(MastersModel):
         if not self.sample_only:
 
             self.loss_net: PerceptualLossNetwork = PerceptualLossNetwork(
-                (
-                    num_image_channels,
-                    self.input_image_height_width[0],
-                    self.input_image_height_width[1],
-                ),
                 self.history_len,
+                self.perceptual_base_model,
+                self.device,
+                self.use_loss_output_image,
             )
 
             # self.loss_net = nn.DataParallel(self.loss_net, device_ids=device_ids)
