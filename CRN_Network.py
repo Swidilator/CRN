@@ -2,9 +2,10 @@ import torch
 import torch.nn as nn
 
 from math import log2
-from typing import Tuple, List, Any
+from typing import Tuple, List, Any, Optional
 
 from CRN.Refinement_Module import RefinementModule
+from GAN.Generator import EncoderDecoder
 
 
 class CRN(torch.nn.Module):
@@ -16,6 +17,7 @@ class CRN(torch.nn.Module):
         num_output_images: int,
         num_classes: int,
         num_inner_channels: int,
+        use_feature_encoder: bool,
     ):
         super(CRN, self).__init__()
 
@@ -25,9 +27,14 @@ class CRN(torch.nn.Module):
         self.num_output_images: int = num_output_images
         self.num_classes: int = num_classes
         self.num_inner_channels: int = num_inner_channels
+        self.use_feature_encoder = use_feature_encoder
 
         self.__NUM_NOISE_CHANNELS__: int = 0
         self.__NUM_OUTPUT_IMAGE_CHANNELS__: int = 3
+
+        if self.use_feature_encoder:
+            # Todo Find better way of setting these parameters
+            self.encoder_decoder: EncoderDecoder = EncoderDecoder(3, 3, 4)
 
         self.num_rms: int = int(log2(final_image_size[0])) - 1
 
@@ -35,10 +42,11 @@ class CRN(torch.nn.Module):
             [
                 RefinementModule(
                     prior_layer_channel_count=self.__NUM_NOISE_CHANNELS__,
-                    semantic_input_channel_count=num_classes,
+                    semantic_input_channel_count=self.num_classes,
                     output_channel_count=self.num_inner_channels,
-                    input_height_width=input_tensor_size,
+                    input_height_width=self.input_tensor_size,
                     is_final_module=False,
+                    use_feature_encoder=self.use_feature_encoder,
                 )
             ]
         )
@@ -47,10 +55,11 @@ class CRN(torch.nn.Module):
             [
                 RefinementModule(
                     prior_layer_channel_count=self.num_inner_channels,
-                    semantic_input_channel_count=num_classes,
+                    semantic_input_channel_count=self.num_classes,
                     output_channel_count=self.num_inner_channels,
                     input_height_width=(2 ** (i + 2), 2 ** (i + 3)),
                     is_final_module=False,
+                    use_feature_encoder=self.use_feature_encoder,
                 )
                 for i in range(1, self.num_rms - 1)
             ]
@@ -65,18 +74,30 @@ class CRN(torch.nn.Module):
                 is_final_module=True,
                 final_channel_count=self.__NUM_OUTPUT_IMAGE_CHANNELS__
                 * num_output_images,
+                use_feature_encoder=self.use_feature_encoder,
             )
         )
         if self.use_tanh:
             self.tan_h = nn.Tanh()
 
     def forward(self, inputs: List[torch.Tensor]):
-        mask: torch.Tensor = inputs[0]
-        noise: torch.Tensor = inputs[1]
+        msk, real_img, instance_original = (
+            inputs[0],
+            inputs[1],
+            inputs[2],
+        )
+        noise: torch.Tensor = inputs[3]
 
-        x: torch.Tensor = self.rms_list[0]([mask, noise])
+        if self.use_feature_encoder:
+            feature_selection: Optional[torch.Tensor] = self.encoder_decoder(
+                real_img, instance_original
+            )
+        else:
+            feature_selection: Optional[torch.Tensor] = None
+
+        x: torch.Tensor = self.rms_list[0]([msk, feature_selection, noise])
         for i in range(1, len(self.rms_list)):
-            x = self.rms_list[i]([mask, x])
+            x = self.rms_list[i]([msk, feature_selection, x])
 
         # TanH for squeezing outputs to [-1, 1]
         if self.use_tanh:

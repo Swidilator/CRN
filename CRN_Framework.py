@@ -163,6 +163,7 @@ class CRNFramework(MastersModel):
             num_output_images=self.num_output_images,
             num_classes=self.num_classes,
             num_inner_channels=self.num_inner_channels,
+            use_feature_encoder=self.use_feature_encodings,
         )
 
         # self.crn = nn.DataParallel(self.crn, device_ids=device_ids)
@@ -246,7 +247,7 @@ class CRNFramework(MastersModel):
         if "update_lambdas" in kwargs and kwargs["update_lambdas"]:
             self.loss_net.update_lambdas()
 
-        for batch_idx, (img_total, msk_total, _) in enumerate(
+        for batch_idx, (img_total, msk_total, _, instance_total, _, _) in enumerate(
             tqdm(self.data_loader_train, desc="Training")
         ):
             this_medium_batch_size: int = img_total.shape[0]
@@ -264,6 +265,9 @@ class CRNFramework(MastersModel):
                     i * self.batch_size_slice : (i + 1) * self.batch_size_slice
                 ].to(self.device)
                 msk: torch.Tensor = msk_total[
+                    i * self.batch_size_slice : (i + 1) * self.batch_size_slice
+                ].to(self.device)
+                instance: torch.Tensor = instance_total[
                     i * self.batch_size_slice : (i + 1) * self.batch_size_slice
                 ].to(self.device)
 
@@ -287,7 +291,7 @@ class CRNFramework(MastersModel):
                 # noise = noise.to(self.device)
 
                 # out: torch.Tensor = self.crn(inputs=(msk, noise, self.batch_size))
-                out: torch.Tensor = self.crn(inputs=(msk, None))
+                out: torch.Tensor = self.crn(inputs=(msk, img, instance, None))
 
                 img = CRNFramework.__normalise__(img)
                 out = CRNFramework.__normalise__(out)
@@ -371,10 +375,14 @@ class CRNFramework(MastersModel):
         # )
         transform: transforms.ToPILImage = transforms.ToPILImage()
 
-        (original_img, msk, msk_colour,) = self.__data_set_val__[image_number]
+        (original_img, msk, msk_colour, instance, _, _) = self.__data_set_val__[
+            image_number
+        ]
         msk = msk.to(self.device).unsqueeze(0)
+        instance = instance.to(self.device).unsqueeze(0)
+        original_img = original_img.to(self.device).unsqueeze(0)
 
-        img_out: torch.Tensor = self.crn(inputs=(msk, None))
+        img_out: torch.Tensor = self.crn(inputs=(msk, original_img, instance, None))
 
         split_images: list = []
         # print(img_out.shape)
@@ -390,15 +398,14 @@ class CRNFramework(MastersModel):
         msk_colour = msk_colour.float().cpu()
 
         output_img_dict: dict = {
-            "output_img_{i}".format(i=i): img
-            for i, img in enumerate(split_images)
+            "output_img_{i}".format(i=i): img for i, img in enumerate(split_images)
         }
 
         output_dict: dict = {
             "image_index": image_number,
             "original_img": transform(original_img),
             "msk_colour": transform(msk_colour),
-            "output_img_dict": output_img_dict
+            "output_img_dict": output_img_dict,
         }
 
         return output_dict

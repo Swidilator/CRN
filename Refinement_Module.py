@@ -22,15 +22,19 @@ class RefinementModule(nn.Module):
         semantic_input_channel_count: int,  # Number of channels from one-hot encoded semantic input
         output_channel_count: int,  # Number of channels to be outputted by this RM
         input_height_width: tuple,  # Input image height and width
+        use_feature_encoder: bool,
         is_final_module: bool = False,  # Is this RM the final in the network
         final_channel_count: int = 3,  # If this RM is final, how many channels must it output
     ):
         super(RefinementModule, self).__init__()
 
         self.input_height_width: tuple = input_height_width
+        self.use_feature_encoder = use_feature_encoder
         # Total number of input channels
         self.total_input_channel_count: int = (
-            prior_layer_channel_count + semantic_input_channel_count
+            prior_layer_channel_count
+            + semantic_input_channel_count
+            + (3 if self.use_feature_encoder else 0)
         )
         self.output_channel_count: int = output_channel_count
         self.is_final_module: bool = is_final_module
@@ -114,10 +118,11 @@ class RefinementModule(nn.Module):
         # print(size_list)
         return torch.Size(size_list)
 
-    def forward(self, inputs: Tuple[torch.Tensor, torch.Tensor]):
+    def forward(self, inputs: Tuple[torch.Tensor, torch.Tensor, torch.Tensor]):
         # Separate inputs
         mask: torch.Tensor = inputs[0]
-        prior_layers: torch.Tensor = inputs[1]
+        feature_selection: torch.Tensor = inputs[1]
+        prior_layers: torch.Tensor = inputs[2]
 
         # Downsample mask for current RM
         mask = torch.nn.functional.interpolate(
@@ -126,26 +131,27 @@ class RefinementModule(nn.Module):
 
         # If there are prior layers, upsample them and concatenate them onto the mask input
         # otherwise, don't
+        x: torch.Tensor = mask
         if prior_layers is not None:
             prior_layers = torch.nn.functional.interpolate(
                 input=prior_layers, size=self.input_height_width, mode="bilinear"
             )
-            x = torch.cat((mask, prior_layers), dim=1)
-        else:
-            x = mask
+            x = torch.cat((x, prior_layers), dim=1)
+        if self.use_feature_encoder:
+            feature_selection = torch.nn.functional.interpolate(
+                input=feature_selection, size=self.input_height_width, mode="nearest"
+            )
+            x = torch.cat((x, feature_selection), dim=1)
 
         x = self.conv_1(x)
         x = self.layer_norm_1(x)
         x = self.leakyReLU(x)
 
         x = self.conv_2(x)
-        # x = self.layer_norm_2(x)
-        # x = self.leakyReLU(x)
 
         if not self.is_final_module:
             x = self.layer_norm_2(x)
             x = self.leakyReLU(x)
-            # x = self.dropout(x)
         else:
             x = self.final_conv(x)
         return x
