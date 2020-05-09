@@ -8,10 +8,10 @@ import os
 from PIL import ImageFile
 
 from CRN.CRN_Dataset import CRNDataset
+from GAN.GAN_Dataset import GANDataset
 from CRN.Perceptual_Loss import PerceptualLossNetwork
 from CRN.CRN_Network import CRN
-from support_scripts.utils import MastersModel
-from support_scripts.utils import ModelSettingsManager
+from support_scripts.utils import MastersModel, ModelSettingsManager, CityScapesDataset
 
 ImageFile.LOAD_TRUNCATED_IMAGES = True
 
@@ -120,13 +120,20 @@ class CRNFramework(MastersModel):
         else:
             self.medium_batch_size: int = self.batch_size_total
 
-        self.__data_set_train__ = CRNDataset(
-            max_input_height_width=self.input_image_height_width,
+        dataset_features_dict: dict = {
+            "instance_map": True,
+            "instance_map_processed": False,
+            "feature_extractions": {"use": False, "file_path": None},
+        }
+
+        self.__data_set_train__ = CityScapesDataset(
+            output_image_height_width=self.input_image_height_width,
             root=self.data_path,
             split="train",
             should_flip=self.should_flip_train,
             subset_size=self.subset_size,
             noise=self.use_input_noise,
+            dataset_features=dataset_features_dict,
         )
 
         self.data_loader_train: torch.utils.data.DataLoader = torch.utils.data.DataLoader(
@@ -136,13 +143,14 @@ class CRNFramework(MastersModel):
             num_workers=self.num_loader_workers,
         )
 
-        self.__data_set_val__ = CRNDataset(
-            max_input_height_width=self.input_image_height_width,
+        self.__data_set_val__ = CityScapesDataset(
+            output_image_height_width=self.input_image_height_width,
             root=self.data_path,
             split="val",
             should_flip=False,
             subset_size=0,
             noise=False,
+            dataset_features=dataset_features_dict,
         )
 
         self.data_loader_val: torch.utils.data.DataLoader = torch.utils.data.DataLoader(

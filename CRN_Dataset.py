@@ -27,10 +27,7 @@ class CRNDataset(Dataset):
         self.noise: bool = noise
 
         self.dataset: Cityscapes = Cityscapes(
-            root=root,
-            split=split,
-            mode="fine",
-            target_type=["semantic", "color"],
+            root=root, split=split, mode="fine", target_type=["semantic", "color"],
         )
 
         self.max_input_height_width = max_input_height_width
