@@ -5,7 +5,7 @@ from math import log2
 from typing import Tuple, List, Any, Optional
 
 from CRN.Refinement_Module import RefinementModule
-from GAN.Generator import EncoderDecoder
+from support_scripts.components import FeatureEncoder
 
 
 class CRN(torch.nn.Module):
@@ -34,7 +34,7 @@ class CRN(torch.nn.Module):
 
         if self.use_feature_encoder:
             # Todo Find better way of setting these parameters
-            self.encoder_decoder: EncoderDecoder = EncoderDecoder(3, 3, 4)
+            self.feature_encoder: FeatureEncoder = FeatureEncoder(3, 3, 4)
 
         self.num_rms: int = int(log2(final_image_size[0])) - 1
 
@@ -89,7 +89,7 @@ class CRN(torch.nn.Module):
         noise: torch.Tensor = inputs[3]
 
         if self.use_feature_encoder:
-            feature_selection: Optional[torch.Tensor] = self.encoder_decoder(
+            feature_selection: Optional[torch.Tensor] = self.feature_encoder(
                 real_img, instance_original
             )
         else:
