@@ -11,7 +11,8 @@ from CRN.CRN_Dataset import CRNDataset
 from GAN.GAN_Dataset import GANDataset
 from CRN.Perceptual_Loss import PerceptualLossNetwork
 from CRN.CRN_Network import CRN
-from support_scripts.utils import MastersModel, ModelSettingsManager, CityScapesDataset
+from support_scripts.utils import MastersModel, ModelSettingsManager
+from support_scripts.components import CityScapesDataset
 
 ImageFile.LOAD_TRUNCATED_IMAGES = True
 
