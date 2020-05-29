@@ -405,9 +405,12 @@ class CRNFramework(MastersModel):
         if use_extracted_features:
             feature_selection = feature_selection.to(self.device).unsqueeze(0)
         else:
-            feature_selection: torch.Tensor = self.crn.feature_encoder(
-                original_img, instance_original
-            )
+            if self.use_feature_encodings:
+                feature_selection: torch.Tensor = self.crn.feature_encoder(
+                    original_img, instance_original
+                )
+            else:
+                feature_selection = None
 
         img_out: torch.Tensor = self.crn.sample_using_extracted_features(
             msk, feature_selection, None
@@ -425,12 +428,14 @@ class CRNFramework(MastersModel):
         original_img = original_img.squeeze(0).cpu()
         # msk = msk.squeeze(0).argmax(0, keepdim=True).float().cpu()
         msk_colour = msk_colour.float().cpu()
-        feature_selection = feature_selection.squeeze(0).cpu()
+        if self.use_feature_encodings:
+            feature_selection = feature_selection.squeeze(0).cpu()
 
         output_img_dict: dict = {
             "output_img_{i}".format(i=i): img for i, img in enumerate(split_images)
         }
-        output_img_dict.update({"feature_selection": transform(feature_selection)})
+        if self.use_feature_encodings:
+            output_img_dict.update({"feature_selection": transform(feature_selection)})
 
         output_dict: dict = {
             "image_index": image_number,
