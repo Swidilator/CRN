@@ -95,16 +95,28 @@ class CRN(torch.nn.Module):
         else:
             feature_selection: Optional[torch.Tensor] = None
 
-        x: torch.Tensor = self.rms_list[0]([msk, feature_selection, noise])
+        return self.generate_output(msk, feature_selection, noise)
+
+    def sample_using_extracted_features(self, msk: torch.Tensor, feature_selection: torch.Tensor, noise: torch.Tensor):
+        return self.generate_output(msk, feature_selection, noise)
+
+    def generate_output(
+        self,
+        msk: torch.Tensor,
+        feature_selection: torch.Tensor,
+        noise: torch.Tensor,
+    ) -> torch.Tensor:
+
+        output: torch.Tensor = self.rms_list[0]([msk, feature_selection, noise])
         for i in range(1, len(self.rms_list)):
-            x = self.rms_list[i]([msk, feature_selection, x])
+            output = self.rms_list[i]([msk, feature_selection, output])
 
         # TanH for squeezing outputs to [-1, 1]
         if self.use_tanh:
             for image_no in range(self.num_output_images):
                 start_index: int = image_no * self.__NUM_OUTPUT_IMAGE_CHANNELS__
                 end_index: int = (image_no + 1) * self.__NUM_OUTPUT_IMAGE_CHANNELS__
-                x[:, start_index:end_index] = self.tan_h(
-                    x[:, start_index:end_index]
+                output[:, start_index:end_index] = self.tan_h(
+                    output[:, start_index:end_index]
                 ).clone()
-        return x
+        return output

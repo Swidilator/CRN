@@ -373,6 +373,10 @@ class CRNFramework(MastersModel):
         return loss_total.item(), None
 
     def sample(self, image_number: int, **kwargs: dict) -> dict:
+        # Retrieve setting from kwargs
+        use_extracted_features: bool = bool(kwargs["use_extracted_features"])
+
+        # Set CRN to eval mode
         self.crn.eval()
 
         # noise: torch.Tensor = torch.randn(
@@ -384,14 +388,30 @@ class CRNFramework(MastersModel):
         # )
         transform: transforms.ToPILImage = transforms.ToPILImage()
 
-        (original_img, msk, msk_colour, instance, _, _) = self.__data_set_val__[
-            image_number
-        ]
+        # img, msk, msk_colour, instance, instance_processed, feature_selection
+        (
+            original_img,
+            msk,
+            msk_colour,
+            instance_original,
+            _,
+            feature_selection,
+        ) = self.__data_set_val__[image_number]
+
         msk = msk.to(self.device).unsqueeze(0)
-        instance = instance.to(self.device).unsqueeze(0)
+        instance_original = instance_original.to(self.device).unsqueeze(0)
         original_img = original_img.to(self.device).unsqueeze(0)
 
-        img_out: torch.Tensor = self.crn(inputs=(msk, original_img, instance, None))
+        if use_extracted_features:
+            feature_selection = feature_selection.to(self.device).unsqueeze(0)
+        else:
+            feature_selection: torch.Tensor = self.crn.feature_encoder(
+                original_img, instance_original
+            )
+
+        img_out: torch.Tensor = self.crn.sample_using_extracted_features(
+            msk, feature_selection, None
+        )
 
         split_images: list = []
         # print(img_out.shape)
@@ -403,12 +423,14 @@ class CRNFramework(MastersModel):
 
             # Bring images to cpu
         original_img = original_img.squeeze(0).cpu()
-        msk = msk.squeeze(0).argmax(0, keepdim=True).float().cpu()
+        #msk = msk.squeeze(0).argmax(0, keepdim=True).float().cpu()
         msk_colour = msk_colour.float().cpu()
+        feature_selection = feature_selection.squeeze(0).cpu()
 
         output_img_dict: dict = {
             "output_img_{i}".format(i=i): img for i, img in enumerate(split_images)
         }
+        output_img_dict.update({"feature_selection": transform(feature_selection)})
 
         output_dict: dict = {
             "image_index": image_number,
