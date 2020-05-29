@@ -6,20 +6,6 @@ import torchvision
 import wandb
 from typing import Tuple, List, Any
 
-# from torchvision.transforms import Resize
-# from copy import copy
-
-
-# class PerceptualDifference(torch.autograd.Function):
-#     @staticmethod
-#     def forward(ctx, img, trth):
-#         result = (img - trth).abs().sum()
-#         return result
-#
-#     @staticmethod
-#     def backward(ctx, grad_output):
-#         return grad_output, None
-
 
 class CircularList:
     def __init__(self, input: int):
