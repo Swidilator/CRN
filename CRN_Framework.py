@@ -423,7 +423,7 @@ class CRNFramework(MastersModel):
 
             # Bring images to cpu
         original_img = original_img.squeeze(0).cpu()
-        #msk = msk.squeeze(0).argmax(0, keepdim=True).float().cpu()
+        # msk = msk.squeeze(0).argmax(0, keepdim=True).float().cpu()
         msk_colour = msk_colour.float().cpu()
         feature_selection = feature_selection.squeeze(0).cpu()
 

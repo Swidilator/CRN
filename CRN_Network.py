@@ -97,14 +97,13 @@ class CRN(torch.nn.Module):
 
         return self.generate_output(msk, feature_selection, noise)
 
-    def sample_using_extracted_features(self, msk: torch.Tensor, feature_selection: torch.Tensor, noise: torch.Tensor):
+    def sample_using_extracted_features(
+        self, msk: torch.Tensor, feature_selection: torch.Tensor, noise: torch.Tensor
+    ):
         return self.generate_output(msk, feature_selection, noise)
 
     def generate_output(
-        self,
-        msk: torch.Tensor,
-        feature_selection: torch.Tensor,
-        noise: torch.Tensor,
+        self, msk: torch.Tensor, feature_selection: torch.Tensor, noise: torch.Tensor,
     ) -> torch.Tensor:
 
         output: torch.Tensor = self.rms_list[0]([msk, feature_selection, noise])

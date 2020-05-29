@@ -5,7 +5,8 @@ from torchvision.datasets import Cityscapes
 from torchvision import transforms
 from PIL import Image
 from random import random
-from matplotlib import pyplot as plt
+
+# from matplotlib import pyplot as plt
 
 
 class CRNDataset(Dataset):
