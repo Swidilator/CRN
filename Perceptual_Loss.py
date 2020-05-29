@@ -93,7 +93,7 @@ class PerceptualLossNetwork(modules.Module):
 
         self.loss_layer_history: list = []
         # Values taken from official source code, no idea how they got them
-        self.loss_layer_scales: list = [1.0, 1.6, 2.3, 1.8, 2.8, 0.08]
+        self.loss_layer_scales = [2.6, 4.8, 3.7, 5.6, 0.15, 1.0]
 
         # History
         for i in range(len(self.loss_layer_scales)):
