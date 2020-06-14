@@ -53,10 +53,11 @@ class RefinementModule(nn.Module):
         RefinementModule.init_conv_weights(self.conv_1)
 
         self.layer_norm_1 = nn.LayerNorm(
-            # RefinementModule.change_output_channel_size(
-            #     input_height_width, self.output_channel_count
-            # )
-            torch.Size(input_height_width)
+            RefinementModule.change_output_channel_size(
+                input_height_width, self.output_channel_count
+            ),
+            # torch.Size(input_height_width),
+            elementwise_affine=False
         )
 
         self.conv_2 = nn.Conv2d(
@@ -68,28 +69,13 @@ class RefinementModule(nn.Module):
         )
         RefinementModule.init_conv_weights(self.conv_2)
 
-        # self.layer_norm_2 = nn.LayerNorm(
-        #     RefinementModule.change_output_channel_size(
-        #         input_height_width, self.output_channel_count
-        #     )
-        # )
-        #
-        # self.conv_3 = nn.Conv2d(
-        #     self.output_channel_count,
-        #     self.output_channel_count,
-        #     kernel_size=3,
-        #     stride=1,
-        #     padding=1,
-        # )
-        # nn.init.xavier_uniform(self.conv_3.weight, gain=1)
-        # nn.init.constant(self.conv_3.bias, 0)
-
         if not self.is_final_module:
             self.layer_norm_2 = nn.LayerNorm(
-                # RefinementModule.change_output_channel_size(
-                #     input_height_width, self.output_channel_count
-                # )
-                torch.Size(input_height_width)
+                RefinementModule.change_output_channel_size(
+                    input_height_width, self.output_channel_count
+                ),
+                # torch.Size(input_height_width),
+                elementwise_affine=False
             )
         else:
             self.final_conv = nn.Conv2d(
