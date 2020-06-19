@@ -33,6 +33,7 @@ def get_layer_values(
     # input is a tuple of packed inputs
     # output is a Tensor. output.data is the Tensor we are interested in
     self.stored_output = output
+    pass
 
 
 class PerceptualLossNetwork(modules.Module):
@@ -69,7 +70,7 @@ class PerceptualLossNetwork(modules.Module):
 
         # loss_layer_numbers: tuple = (2, 7, 12, 21, 30)
         if self.base_model == "VGG":
-            loss_layer_numbers: tuple = (2, 7, 12, 21, 30)
+            loss_layer_numbers: tuple = (3, 8, 13, 22, 31)
             for i in loss_layer_numbers:
                 self.output_feature_layers.append(self.feature_network[i])
         elif self.base_model == "MobileNet":
@@ -79,7 +80,7 @@ class PerceptualLossNetwork(modules.Module):
 
         self.loss_layer_history: list = []
         # Values taken from official source code, no idea how they got them
-        self.loss_layer_scales = [2.6, 4.8, 3.7, 5.6, 0.15, 1.0]
+        self.loss_layer_scales = [1.6, 2.3, 1.8, 2.8, 0.08, 1.0]
 
         # History
         for i in range(len(self.loss_layer_scales)):
@@ -160,6 +161,7 @@ class PerceptualLossNetwork(modules.Module):
                         input=input_label, size=label_shape, mode="nearest"
                     )
 
+                    # Todo label_interpolate[0] only works for batch size of 1
                     layer_loss: torch.Tensor = PerceptualLossNetwork.__calculate_loss(
                         result_gen[i][b], result_truth[i][b], label_interpolate[0],
                     )
@@ -180,7 +182,9 @@ class PerceptualLossNetwork(modules.Module):
         min_loss, _ = torch.min(batch_loss, dim=0)
         # print(min_loss.detach().cpu().numpy())
 
-        total_loss: torch.Tensor = (min_loss * 0.999) + (batch_loss.mean(dim=0) * 0.001)
+        total_loss: torch.Tensor = (min_loss.sum() * 0.999) + (
+            batch_loss.mean(dim=0).sum() * 0.001
+        )
 
         # loss_contributions = [x / this_batch_size for x in loss_contributions]
         # for i, val in enumerate(loss_contributions):
@@ -188,4 +192,4 @@ class PerceptualLossNetwork(modules.Module):
 
         del loss_contributions
         # total loss reduction = mean
-        return torch.sum(total_loss / this_batch_size)
+        return total_loss / this_batch_size
