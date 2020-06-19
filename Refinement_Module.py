@@ -57,7 +57,6 @@ class RefinementModule(nn.Module):
                 input_height_width, self.output_channel_count
             ),
             # torch.Size(input_height_width),
-            elementwise_affine=False
         )
 
         self.conv_2 = nn.Conv2d(
@@ -75,7 +74,6 @@ class RefinementModule(nn.Module):
                     input_height_width, self.output_channel_count
                 ),
                 # torch.Size(input_height_width),
-                elementwise_affine=False
             )
         else:
             self.final_conv = nn.Conv2d(
