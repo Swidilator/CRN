@@ -74,7 +74,8 @@ class PerceptualLossNetwork(modules.Module):
             for i in loss_layer_numbers:
                 self.output_feature_layers.append(self.feature_network[i])
         elif self.base_model == "MobileNet":
-            loss_layer_numbers: tuple = (2, 4, 6, 11, 15)
+            # Todo Check these are indeed targeting relu layers
+            loss_layer_numbers: tuple = (3, 5, 7, 12, 16)
             for i in loss_layer_numbers:
                 self.output_feature_layers.append(self.feature_network[i].conv[2])
 
