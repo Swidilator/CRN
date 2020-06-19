@@ -132,6 +132,7 @@ class CRNFramework(MastersModel):
             batch_size=self.batch_size,
             shuffle=True,
             num_workers=self.num_loader_workers,
+            pin_memory=True,
         )
 
         self.__data_set_val__ = CityScapesDataset(
