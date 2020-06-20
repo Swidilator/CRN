@@ -1,11 +1,11 @@
 import torch
 from torchvision import transforms
-from typing import Tuple, List, Any
+from typing import Tuple, List, Any, Union
 import wandb
 from tqdm import tqdm
 import os
 from PIL import ImageFile
-
+from contextlib import nullcontext
 
 from CRN.Perceptual_Loss import PerceptualLossNetwork
 from CRN.CRN_Network import CRN
@@ -29,6 +29,7 @@ class CRNFramework(MastersModel):
         use_tanh: bool,
         use_input_noise: bool,
         sample_only: bool,
+        use_amp: Union[str, bool],
         **kwargs,
     ):
         super(CRNFramework, self).__init__(
@@ -43,6 +44,7 @@ class CRNFramework(MastersModel):
             use_tanh,
             use_input_noise,
             sample_only,
+            use_amp,
         )
         self.model_name: str = "CRN"
 
@@ -93,6 +95,7 @@ class CRNFramework(MastersModel):
             "use_tanh": not manager.args["no_tanh"],
             "use_input_noise": manager.args["input_image_noise"],
             "sample_only": manager.args["sample_only"],
+            "use_amp": manager.args["use_amp"],
         }
 
         settings = {
@@ -190,8 +193,23 @@ class CRNFramework(MastersModel):
                 eps=1e-08,
                 weight_decay=0,
             )
-            # Empty cache for cleanup
-            torch.cuda.empty_cache()
+
+            self.normalise = transforms.Normalize(
+                mean=[0.485, 0.456, 0.406],
+                std=[0.229, 0.224, 0.225]
+            )
+
+            # Mixed precision
+            if self.use_amp == "torch":
+                from torch.cuda import amp as torch_amp
+
+                self.torch_gradient_scaler: torch_amp.GradScaler() = torch_amp.GradScaler()
+                self.torch_amp_autocast = torch_amp.autocast
+            else:
+                self.torch_amp_autocast = nullcontext
+
+        # Empty cache for cleanup
+        torch.cuda.empty_cache()
 
     def save_model(self, model_dir: str, epoch: int = -1) -> None:
         super().save_model(model_dir)
@@ -261,27 +279,38 @@ class CRNFramework(MastersModel):
             #     device=self.device,
             # )
             # noise = noise.to(self.device)
+            # TRAIN WITH ALL REAL BATCH
+            with self.torch_amp_autocast():
+                out: torch.Tensor = self.crn(inputs=(msk, img, instance, None))
+                # torch.cuda.empty_cache()
+                # transform = transforms.ToPILImage()
+                # image_output = out[0].detach().cpu()
+                # tf_image = transform(torch.nn.functional.tanh(image_output))
+                # # plt.imshow((((output[0] + output[0].min()) / (output[0].max() / 2)) - 1).cpu().permute(1,2,0).detach())
+                # plt.imshow(tf_image)
+                # plt.show()
 
-            out: torch.Tensor = self.crn(inputs=(msk, img, instance, None))
-            # torch.cuda.empty_cache()
-            # transform = transforms.ToPILImage()
-            # image_output = out[0].detach().cpu()
-            # tf_image = transform(torch.nn.functional.tanh(image_output))
-            # # plt.imshow((((output[0] + output[0].min()) / (output[0].max() / 2)) - 1).cpu().permute(1,2,0).detach())
-            # plt.imshow(tf_image)
-            # plt.show()
+                # img = CRNFramework.__normalise__(img)
+                # out = CRNFramework.__normalise__(out)
+                # img -= out.min(1, keepdim=True)[0]
+                # img /= out.max(1, keepdim=True)[0]
+                img = self.normalise(img.squeeze(dim=0)).unsqueeze(0)
 
-            img = CRNFramework.__normalise__(img)
-            out = CRNFramework.__normalise__(out)
+                # out -= out.min(1, keepdim=True)[0]
+                # out /= out.max(1, keepdim=True)[0]
+                out = self.normalise(out.squeeze(dim=0)).unsqueeze(0)
 
-            loss: torch.Tensor = self.loss_net((out, img, msk))
+                loss: torch.Tensor = self.loss_net((out, img, msk))
             # torch.cuda.empty_cache()
             # with amp.scale_loss(loss, self.optimizer) as scaled_loss:
             #     scaled_loss.backward()
-            loss.backward()
-
-            # print("Stepping")
-            self.optimizer.step()
+            if self.use_amp == "torch":
+                self.torch_gradient_scaler.scale(loss).backward()
+                self.torch_gradient_scaler.step(self.optimizer)
+                self.torch_gradient_scaler.update()
+            else:
+                loss.backward()
+                self.optimizer.step()
 
             loss_total += loss.item() * self.batch_size
             batch_loss_val: float = loss.item()
