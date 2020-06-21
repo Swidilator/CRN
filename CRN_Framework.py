@@ -46,7 +46,7 @@ class CRNFramework(MastersModel):
             use_input_noise,
             sample_only,
             use_amp,
-            use_hsv
+            use_hsv,
         )
         self.model_name: str = "CRN"
 
@@ -170,7 +170,7 @@ class CRNFramework(MastersModel):
             num_classes=self.num_classes,
             num_inner_channels=self.num_inner_channels,
             use_feature_encoder=self.use_feature_encodings,
-            use_hsv=self.use_hsv
+            use_hsv=self.use_hsv,
         )
 
         # self.crn = nn.DataParallel(self.crn, device_ids=device_ids)
@@ -199,8 +199,7 @@ class CRNFramework(MastersModel):
             )
 
             self.normalise = transforms.Normalize(
-                mean=[0.485, 0.456, 0.406],
-                std=[0.229, 0.224, 0.225]
+                mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]
             )
 
             # Mixed precision
@@ -404,15 +403,12 @@ class CRNFramework(MastersModel):
             msk, feature_selection, None
         )
 
-        split_images: list = []
-        # print(img_out.shape)
-        for img_no in range(self.num_output_images):
-            start_channel: int = img_no * 3
-            end_channel: int = (img_no + 1) * 3
-            img_out_single: torch.Tensor = img_out[0, start_channel:end_channel].cpu()
-            split_images.append(transform(img_out_single))
+        # Drop batch dimension
+        img_out = img_out.squeeze(0).cpu()
 
-            # Bring images to cpu
+        split_images = [transform(single_img) for single_img in img_out]
+
+        # Bring images to CPU
         original_img = original_img.squeeze(0).cpu()
         # msk = msk.squeeze(0).argmax(0, keepdim=True).float().cpu()
         msk_colour = msk_colour.float().cpu()

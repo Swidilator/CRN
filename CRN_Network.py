@@ -19,7 +19,7 @@ class CRN(torch.nn.Module):
         num_classes: int,
         num_inner_channels: int,
         use_feature_encoder: bool,
-        use_hsv: bool
+        use_hsv: bool,
     ):
         super(CRN, self).__init__()
 
@@ -114,7 +114,7 @@ class CRN(torch.nn.Module):
             output = self.rms_list[i]([msk, feature_selection, output])
 
         # TODO Clean up
-        #output = (output + 1.0) / 2.0 * 255.0
+        # output = (output + 1.0) / 2.0 * 255.0
         a, b, c = torch.chunk(output.permute(1, 0, 2, 3).unsqueeze(0), 3, 1)
         output = torch.cat((a, b, c), 2)
 
