@@ -113,8 +113,14 @@ class CRN(torch.nn.Module):
         for i in range(1, len(self.rms_list)):
             output = self.rms_list[i]([msk, feature_selection, output])
 
+        # TODO Clean up
+        #output = (output + 1.0) / 2.0 * 255.0
+        a, b, c = torch.chunk(output.permute(1, 0, 2, 3).unsqueeze(0), 3, 1)
+        output = torch.cat((a, b, c), 2)
+
         if self.use_hsv:
-            output = kornia.hsv_to_rgb(output)
+            for i in range(output.shape[1]):
+                output[:, i] = kornia.hsv_to_rgb(output[:, i])
 
         # TanH for squeezing outputs to [-1, 1]
         if self.use_tanh:

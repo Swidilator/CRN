@@ -286,7 +286,7 @@ class CRNFramework(MastersModel):
             # TRAIN WITH ALL REAL BATCH
             with self.torch_amp_autocast():
                 out: torch.Tensor = self.crn(inputs=(msk, img, instance, None))
-                # torch.cuda.empty_cache()
+                torch.cuda.empty_cache()
                 # transform = transforms.ToPILImage()
                 # image_output = out[0].detach().cpu()
                 # tf_image = transform(torch.nn.functional.tanh(image_output))
@@ -302,10 +302,12 @@ class CRNFramework(MastersModel):
 
                 # out -= out.min(1, keepdim=True)[0]
                 # out /= out.max(1, keepdim=True)[0]
-                out = self.normalise(out.squeeze(dim=0)).unsqueeze(0)
+                for i in range(out.shape[0]):
+                    for j in range(out.shape[1]):
+                        out[i, j] = self.normalise(out[i, j])
 
                 loss: torch.Tensor = self.loss_net((out, img, msk))
-            # torch.cuda.empty_cache()
+            torch.cuda.empty_cache()
             # with amp.scale_loss(loss, self.optimizer) as scaled_loss:
             #     scaled_loss.backward()
             if self.use_amp == "torch":
