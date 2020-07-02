@@ -1,6 +1,5 @@
 import torch
 import torch.nn as nn
-import kornia
 
 from math import log2
 from typing import Tuple, List, Any, Optional
@@ -19,7 +18,6 @@ class CRN(torch.nn.Module):
         num_classes: int,
         num_inner_channels: int,
         use_feature_encoder: bool,
-        use_hsv: bool,
     ):
         super(CRN, self).__init__()
 
@@ -30,7 +28,6 @@ class CRN(torch.nn.Module):
         self.num_classes: int = num_classes
         self.num_inner_channels: int = num_inner_channels
         self.use_feature_encoder = use_feature_encoder
-        self.use_hsv: bool = use_hsv
 
         self.__NUM_NOISE_CHANNELS__: int = 0
         self.__NUM_OUTPUT_IMAGE_CHANNELS__: int = 3
@@ -117,10 +114,6 @@ class CRN(torch.nn.Module):
         # output = (output + 1.0) / 2.0 * 255.0
         a, b, c = torch.chunk(output.permute(1, 0, 2, 3).unsqueeze(0), 3, 1)
         output = torch.cat((a, b, c), 2)
-
-        if self.use_hsv:
-            for i in range(output.shape[1]):
-                output[:, i] = kornia.hsv_to_rgb(output[:, i])
 
         # TanH for squeezing outputs to [-1, 1]
         if self.use_tanh:

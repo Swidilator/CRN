@@ -30,7 +30,6 @@ class CRNFramework(MastersModel):
         use_input_noise: bool,
         sample_only: bool,
         use_amp: Union[str, bool],
-        use_hsv: bool,
         **kwargs,
     ):
         super(CRNFramework, self).__init__(
@@ -46,7 +45,6 @@ class CRNFramework(MastersModel):
             use_input_noise,
             sample_only,
             use_amp,
-            use_hsv,
         )
         self.model_name: str = "CRN"
 
@@ -98,7 +96,6 @@ class CRNFramework(MastersModel):
             "use_input_noise": manager.args["input_image_noise"],
             "sample_only": manager.args["sample_only"],
             "use_amp": manager.args["use_amp"],
-            "use_hsv": manager.args["use_hsv"],
         }
 
         settings = {
@@ -160,8 +157,6 @@ class CRNFramework(MastersModel):
 
     def __set_model__(self, **kwargs) -> None:
 
-        num_image_channels = 3
-
         self.crn: CRN = CRN(
             use_tanh=self.use_tanh,
             input_tensor_size=self.input_tensor_size,
@@ -170,7 +165,6 @@ class CRNFramework(MastersModel):
             num_classes=self.num_classes,
             num_inner_channels=self.num_inner_channels,
             use_feature_encoder=self.use_feature_encodings,
-            use_hsv=self.use_hsv,
         )
 
         # self.crn = nn.DataParallel(self.crn, device_ids=device_ids)
