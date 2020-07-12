@@ -127,7 +127,6 @@ class PerceptualLossNetwork(modules.Module):
 
         # img_losses: list = []
         this_batch_size = input_gen.shape[0]
-        num_channels = 3
 
         # Loss function requires multiple images per image, so 5D
         input_truth = input_truth.unsqueeze(1)

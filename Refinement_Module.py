@@ -44,74 +44,87 @@ class RefinementModule(nn.Module):
 
     def __init__(
         self,
-        prior_layer_channel_count: int,  # Number of channels from previous RM or noise
         semantic_input_channel_count: int,  # Number of channels from one-hot encoded semantic input
-        output_channel_count: int,  # Number of channels to be outputted by this RM
+        noise_input_channel_count: int,
+        feature_encoder_input_channel_count: int,
+        base_inner_channel_count: int,
+        final_conv_output_channel_count: int,
+        first_rm: bool,
         input_height_width: tuple,  # Input image height and width
-        use_feature_encoder: bool,
-        is_final_module: bool = False,  # Is this RM the final in the network
-        final_channel_count: int = 3,  # If this RM is final, how many channels must it output
     ):
         super(RefinementModule, self).__init__()
 
         self.input_height_width: tuple = input_height_width
-        self.use_feature_encoder = use_feature_encoder
+        self.transition_rms: bool = self.input_height_width[0] == 128
+
+        self.true_inner_channel_count: int = base_inner_channel_count if (
+            self.input_height_width[0] < 128
+        ) else base_inner_channel_count // 2
+
         # Total number of input channels
         self.total_input_channel_count: int = (
-            prior_layer_channel_count
-            + semantic_input_channel_count
-            + (3 if self.use_feature_encoder else 0)
+            semantic_input_channel_count
+            + feature_encoder_input_channel_count
+            + noise_input_channel_count
+            + (
+                self.true_inner_channel_count * (self.transition_rms + 1)
+                if not first_rm
+                else 0
+            )
         )
-        self.output_channel_count: int = output_channel_count
-        self.is_final_module: bool = is_final_module
-        self.final_channel_count = final_channel_count
 
+        self.final_conv_output_channel_count: int = final_conv_output_channel_count
+        self.use_feature_encoder: int = feature_encoder_input_channel_count > 0
+        self.is_final_module: bool = self.final_conv_output_channel_count > 0
         # self.dropout = nn.Dropout2d(p=0.1)
 
         # Module architecture
         self.conv_1 = nn.Conv2d(
             self.total_input_channel_count,
-            self.output_channel_count,
+            self.true_inner_channel_count,
             kernel_size=3,
             stride=1,
             padding=1,
         )
         RefinementModule.init_conv_weights(self.conv_1)
 
-        self.layer_norm_1 = nn.LayerNorm(
-            RefinementModule.change_output_channel_size(
-                input_height_width, self.output_channel_count
-            ),
-            # torch.Size(input_height_width),
-        )
+        # self.layer_norm_1 = nn.LayerNorm(
+        #     # RefinementModule.change_output_channel_size(
+        #     #     input_height_width, self.true_inner_channel_count
+        #     # ),
+        #     torch.Size(input_height_width),
+        # )
+        self.layer_norm_1 = LayerNorm(self.true_inner_channel_count)
+        self.leakyReLU_1 = nn.LeakyReLU(negative_slope=0.2, inplace=True)
 
         self.conv_2 = nn.Conv2d(
-            self.output_channel_count,
-            self.output_channel_count,
+            self.true_inner_channel_count,
+            self.true_inner_channel_count,
             kernel_size=3,
             stride=1,
             padding=1,
         )
         RefinementModule.init_conv_weights(self.conv_2)
 
-        self.layer_norm_2 = nn.LayerNorm(
-            RefinementModule.change_output_channel_size(
-                input_height_width, self.output_channel_count
-            ),
-            # torch.Size(input_height_width),
-        )
+        # self.layer_norm_2 = nn.LayerNorm(
+        #     # RefinementModule.change_output_channel_size(
+        #     #     input_height_width, self.true_inner_channel_count
+        #     # ),
+        #     torch.Size(input_height_width),
+        # )
+        self.layer_norm_2 = LayerNorm(self.true_inner_channel_count)
+
+        self.leakyReLU_2 = nn.LeakyReLU(negative_slope=0.2, inplace=True)
 
         if self.is_final_module:
             self.final_conv = nn.Conv2d(
-                self.output_channel_count,
-                self.final_channel_count,
+                self.true_inner_channel_count,
+                self.final_conv_output_channel_count,
                 kernel_size=1,
                 stride=1,
                 padding=0,
             )
             RefinementModule.init_conv_weights(self.final_conv)
-
-        self.leakyReLU = nn.LeakyReLU(negative_slope=0.2)
 
     @staticmethod
     def init_conv_weights(conv: nn.Module) -> None:
@@ -155,11 +168,11 @@ class RefinementModule(nn.Module):
 
         x = self.conv_1(x)
         x = self.layer_norm_1(x)
-        x = self.leakyReLU(x)
+        x = self.leakyReLU_1(x)
 
         x = self.conv_2(x)
         x = self.layer_norm_2(x)
-        x = self.leakyReLU(x)
+        x = self.leakyReLU_2(x)
 
         if self.is_final_module:
             x = self.final_conv(x)

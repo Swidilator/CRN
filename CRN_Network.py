@@ -41,12 +41,13 @@ class CRN(torch.nn.Module):
         self.rms_list: nn.ModuleList = nn.ModuleList(
             [
                 RefinementModule(
-                    prior_layer_channel_count=self.__NUM_NOISE_CHANNELS__,
                     semantic_input_channel_count=self.num_classes,
-                    output_channel_count=self.num_inner_channels,
+                    noise_input_channel_count=self.__NUM_NOISE_CHANNELS__,
+                    feature_encoder_input_channel_count=(self.use_feature_encoder * 3),
+                    base_inner_channel_count=self.num_inner_channels,
+                    final_conv_output_channel_count=0,
+                    first_rm=True,
                     input_height_width=self.input_tensor_size,
-                    is_final_module=False,
-                    use_feature_encoder=self.use_feature_encoder,
                 )
             ]
         )
@@ -54,12 +55,13 @@ class CRN(torch.nn.Module):
         self.rms_list.extend(
             [
                 RefinementModule(
-                    prior_layer_channel_count=self.num_inner_channels,
                     semantic_input_channel_count=self.num_classes,
-                    output_channel_count=self.num_inner_channels,
+                    noise_input_channel_count=0,
+                    feature_encoder_input_channel_count=(self.use_feature_encoder * 3),
+                    base_inner_channel_count=self.num_inner_channels,
+                    final_conv_output_channel_count=0,
+                    first_rm=False,
                     input_height_width=(2 ** (i + 2), 2 ** (i + 3)),
-                    is_final_module=False,
-                    use_feature_encoder=self.use_feature_encoder,
                 )
                 for i in range(1, self.num_rms - 1)
             ]
@@ -67,14 +69,14 @@ class CRN(torch.nn.Module):
 
         self.rms_list.append(
             RefinementModule(
-                prior_layer_channel_count=self.num_inner_channels,
-                semantic_input_channel_count=num_classes,
-                output_channel_count=self.num_inner_channels,
-                input_height_width=final_image_size,
-                is_final_module=True,
-                final_channel_count=self.__NUM_OUTPUT_IMAGE_CHANNELS__
+                semantic_input_channel_count=self.num_classes,
+                noise_input_channel_count=0,
+                feature_encoder_input_channel_count=(self.use_feature_encoder * 3),
+                base_inner_channel_count=self.num_inner_channels,
+                final_conv_output_channel_count=self.__NUM_OUTPUT_IMAGE_CHANNELS__
                 * num_output_images,
-                use_feature_encoder=self.use_feature_encoder,
+                first_rm=False,
+                input_height_width=final_image_size,
             )
         )
         if self.use_tanh:
