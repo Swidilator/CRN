@@ -30,6 +30,7 @@ class CRNFramework(MastersModel):
         use_input_noise: bool,
         sample_only: bool,
         use_amp: Union[str, bool],
+        log_every_n_steps: int,
         **kwargs,
     ):
         super(CRNFramework, self).__init__(
@@ -45,10 +46,9 @@ class CRNFramework(MastersModel):
             use_input_noise,
             sample_only,
             use_amp,
+            log_every_n_steps,
         )
         self.model_name: str = "CRN"
-
-        self.max_data_loader_batch_size: int = 16
 
         try:
             assert "input_tensor_size" in kwargs
@@ -96,6 +96,7 @@ class CRNFramework(MastersModel):
             "use_input_noise": manager.args["input_image_noise"],
             "sample_only": manager.args["sample_only"],
             "use_amp": manager.args["use_amp"],
+            "log_every_n_steps": manager.args["log_every_n_steps"],
         }
 
         settings = {
@@ -245,7 +246,6 @@ class CRNFramework(MastersModel):
 
     def train(self, **kwargs) -> Tuple[float, Any]:
         self.crn.train()
-        torch.cuda.empty_cache()
 
         current_epoch: int = kwargs["current_epoch"]
 
@@ -268,18 +268,8 @@ class CRNFramework(MastersModel):
             msk: torch.Tensor = msk.to(self.device)
             instance: torch.Tensor = instance.to(self.device)
 
-            # noise: torch.Tensor = torch.randn(
-            #     this_batch_size,
-            #     1,
-            #     self.input_tensor_size[0],
-            #     self.input_tensor_size[1],
-            #     device=self.device,
-            # )
-            # noise = noise.to(self.device)
-            # TRAIN WITH ALL REAL BATCH
             with self.torch_amp_autocast():
                 out: torch.Tensor = self.crn(inputs=(msk, img, instance, None))
-                torch.cuda.empty_cache()
                 # transform = transforms.ToPILImage()
                 # image_output = out[0].detach().cpu()
                 # tf_image = transform(torch.nn.functional.tanh(image_output))
@@ -287,20 +277,13 @@ class CRNFramework(MastersModel):
                 # plt.imshow(tf_image)
                 # plt.show()
 
-                # img = CRNFramework.__normalise__(img)
-                # out = CRNFramework.__normalise__(out)
-                # img -= out.min(1, keepdim=True)[0]
-                # img /= out.max(1, keepdim=True)[0]
                 img = self.normalise(img.squeeze(dim=0)).unsqueeze(0)
 
-                # out -= out.min(1, keepdim=True)[0]
-                # out /= out.max(1, keepdim=True)[0]
                 for i in range(out.shape[0]):
                     for j in range(out.shape[1]):
                         out[i, j] = self.normalise(out[i, j])
 
                 loss: torch.Tensor = self.loss_net((out, img, msk))
-            torch.cuda.empty_cache()
             # with amp.scale_loss(loss, self.optimizer) as scaled_loss:
             #     scaled_loss.backward()
             if self.use_amp == "torch":
@@ -312,18 +295,22 @@ class CRNFramework(MastersModel):
                 self.optimizer.step()
 
             loss_total += loss.item() * self.batch_size
-            batch_loss_val: float = loss.item()
 
-            wandb.log(
-                {
-                    "Epoch_Fraction": current_epoch
-                    + (
-                        (batch_idx * self.batch_size)
-                        / len(self.data_loader_train.dataset)
-                    ),
-                    "Batch Loss": batch_loss_val,
-                }
-            )
+            if batch_idx % self.log_evey_n_steps == 0 or batch_idx == (
+                len(self.data_loader_train) - 1
+            ):
+                batch_loss_val: float = loss.item()
+
+                wandb.log(
+                    {
+                        "Epoch_Fraction": current_epoch
+                        + (
+                            (batch_idx * self.batch_size)
+                            / len(self.data_loader_train.dataset)
+                        ),
+                        "Batch Loss": batch_loss_val,
+                    }
+                )
 
         return loss_total, None
 
@@ -334,14 +321,6 @@ class CRNFramework(MastersModel):
         for batch_idx, (img, msk) in enumerate(self.data_loader_val):
             img: torch.Tensor = img.to(self.device)
             msk: torch.Tensor = msk.to(self.device)
-            # noise: torch.Tensor = torch.randn(
-            #     msk.shape[0],
-            #     1,
-            #     self.input_tensor_size[0],
-            #     self.input_tensor_size[1],
-            #     device=self.device,
-            # )
-            # noise = noise.to(self.device)
 
             out: torch.Tensor = self.crn(inputs=(msk, None))
 
