@@ -52,11 +52,11 @@ class PerceptualLossNetwork(modules.Module):
 
         if self.base_model == "VGG":
             vgg = torchvision.models.vgg19(pretrained=True, progress=True)
-            self.feature_network = vgg.features
+            self.feature_network = vgg.features[0:32]
             del vgg
         elif self.base_model == "MobileNet":
             mobile_net = torchvision.models.mobilenet_v2(pretrained=True, progress=True)
-            self.feature_network = mobile_net.features
+            self.feature_network = mobile_net.features[0:17]
             del mobile_net
 
         for param in self.feature_network.parameters():
