@@ -58,6 +58,7 @@ class CRNFramework(MastersModel):
             assert "perceptual_base_model" in kwargs
             assert "use_feature_encodings" in kwargs
             assert "use_loss_output_image" in kwargs
+            assert "layer_norm_type" in kwargs
         except AssertionError as e:
             print("Missing argument: {error}".format(error=e))
             raise SystemExit
@@ -69,6 +70,7 @@ class CRNFramework(MastersModel):
         self.perceptual_base_model: str = kwargs["perceptual_base_model"]
         self.use_feature_encodings: bool = kwargs["use_feature_encodings"]
         self.use_loss_output_image: bool = kwargs["use_loss_output_image"]
+        self.layer_norm_type: bool = kwargs["layer_norm_type"]
 
         self.__set_data_loader__()
 
@@ -110,6 +112,7 @@ class CRNFramework(MastersModel):
             "perceptual_base_model": manager.model_conf["CRN_PERCEPTUAL_BASE_MODEL"],
             "use_feature_encodings": manager.model_conf["CRN_USE_FEATURE_ENCODINGS"],
             "use_loss_output_image": manager.model_conf["CRN_USE_LOSS_OUTPUT_IMAGE"],
+            "layer_norm_type": manager.model_conf["CRN_LAYER_NORM_TYPE"],
         }
         return cls(**model_frame_args, **settings)
 
@@ -166,6 +169,7 @@ class CRNFramework(MastersModel):
             num_classes=self.num_classes,
             num_inner_channels=self.num_inner_channels,
             use_feature_encoder=self.use_feature_encodings,
+            layer_norm_type=self.layer_norm_type
         )
 
         # self.crn = nn.DataParallel(self.crn, device_ids=device_ids)
