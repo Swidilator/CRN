@@ -160,8 +160,8 @@ class RefinementModule(nn.Module):
 
     @staticmethod
     def init_conv_weights(conv: nn.Module) -> None:
-        nn.init.normal_(conv.weight, mean=0.0, std=0.02)
-        # nn.init.xavier_uniform_(conv.weight, gain=1)
+        # nn.init.normal_(conv.weight, mean=0.0, std=0.02)
+        nn.init.xavier_uniform_(conv.weight, gain=1)
         nn.init.constant_(conv.bias, 0)
 
     @staticmethod
