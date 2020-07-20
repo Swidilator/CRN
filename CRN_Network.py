@@ -18,7 +18,7 @@ class CRN(torch.nn.Module):
         num_classes: int,
         num_inner_channels: int,
         use_feature_encoder: bool,
-        layer_norm_type: str
+        layer_norm_type: str,
     ):
         super(CRN, self).__init__()
 
@@ -50,7 +50,7 @@ class CRN(torch.nn.Module):
                     final_conv_output_channel_count=0,
                     first_rm=True,
                     input_height_width=self.input_tensor_size,
-                    layer_norm_type=self.layer_norm_type
+                    norm_type=self.layer_norm_type,
                 )
             ]
         )
@@ -65,7 +65,7 @@ class CRN(torch.nn.Module):
                     final_conv_output_channel_count=0,
                     first_rm=False,
                     input_height_width=(2 ** (i + 2), 2 ** (i + 3)),
-                    layer_norm_type=self.layer_norm_type
+                    norm_type=self.layer_norm_type,
                 )
                 for i in range(1, self.num_rms - 1)
             ]
@@ -81,7 +81,7 @@ class CRN(torch.nn.Module):
                 * num_output_images,
                 first_rm=False,
                 input_height_width=final_image_size,
-                layer_norm_type=self.layer_norm_type
+                norm_type=self.layer_norm_type,
             )
         )
         if self.use_tanh:

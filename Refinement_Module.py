@@ -51,7 +51,7 @@ class RefinementModule(nn.Module):
         final_conv_output_channel_count: int,
         first_rm: bool,
         input_height_width: tuple,  # Input image height and width
-        layer_norm_type: str
+        norm_type: str,
     ):
         super(RefinementModule, self).__init__()
 
@@ -89,19 +89,28 @@ class RefinementModule(nn.Module):
         )
         RefinementModule.init_conv_weights(self.conv_1)
 
-        if layer_norm_type == "full":
-            self.layer_norm_1 = nn.LayerNorm(
+        if norm_type == "full":
+            self.norm_1 = nn.LayerNorm(
                 RefinementModule.change_output_channel_size(
                     input_height_width, self.true_inner_channel_count
                 ),
-                # torch.Size(input_height_width),
             )
-        elif layer_norm_type == "half":
-            self.layer_norm_1 = nn.LayerNorm(
-                torch.Size(input_height_width),
+        elif norm_type == "half":
+            self.norm_1 = nn.LayerNorm(torch.Size(input_height_width))
+        elif norm_type == "blade":
+            self.norm_1 = LayerNorm(self.true_inner_channel_count)
+        elif norm_type == "none":
+            self.norm_1 = lambda x: x
+        elif norm_type == "group":
+            self.norm_1 = nn.GroupNorm(1, self.true_inner_channel_count)
+        elif norm_type == "instance":
+            self.norm_1 = nn.InstanceNorm2d(
+                self.true_inner_channel_count,
+                eps=1e-05,
+                momentum=0.1,
+                affine=False,
+                track_running_stats=False,
             )
-        elif layer_norm_type == "blade":
-            self.layer_norm_1 = LayerNorm(self.true_inner_channel_count)
 
         self.leakyReLU_1 = nn.LeakyReLU(negative_slope=0.2, inplace=True)
 
@@ -114,19 +123,28 @@ class RefinementModule(nn.Module):
         )
         RefinementModule.init_conv_weights(self.conv_2)
 
-        if layer_norm_type == "full":
-            self.layer_norm_2 = nn.LayerNorm(
+        if norm_type == "full":
+            self.norm_2 = nn.LayerNorm(
                 RefinementModule.change_output_channel_size(
                     input_height_width, self.true_inner_channel_count
                 ),
-                # torch.Size(input_height_width),
             )
-        elif layer_norm_type == "half":
-            self.layer_norm_2 = nn.LayerNorm(
-                torch.Size(input_height_width),
+        elif norm_type == "half":
+            self.norm_2 = nn.LayerNorm(torch.Size(input_height_width))
+        elif norm_type == "blade":
+            self.norm_2 = LayerNorm(self.true_inner_channel_count)
+        elif norm_type == "none":
+            self.norm_2 = lambda x: x
+        elif norm_type == "group":
+            self.norm_2 = nn.GroupNorm(1, self.true_inner_channel_count)
+        elif norm_type == "instance":
+            self.norm_2 = nn.InstanceNorm2d(
+                self.true_inner_channel_count,
+                eps=1e-05,
+                momentum=0.1,
+                affine=False,
+                track_running_stats=False,
             )
-        elif layer_norm_type == "blade":
-            self.layer_norm_2 = LayerNorm(self.true_inner_channel_count)
 
         self.leakyReLU_2 = nn.LeakyReLU(negative_slope=0.2, inplace=True)
 
@@ -181,11 +199,11 @@ class RefinementModule(nn.Module):
             x = torch.cat((x, feature_selection), dim=1)
 
         x = self.conv_1(x)
-        x = self.layer_norm_1(x)
+        x = self.norm_1(x)
         x = self.leakyReLU_1(x)
 
         x = self.conv_2(x)
-        x = self.layer_norm_2(x)
+        x = self.norm_2(x)
         x = self.leakyReLU_2(x)
 
         if self.is_final_module:
