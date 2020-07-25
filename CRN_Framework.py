@@ -22,7 +22,7 @@ class CRNFramework(MastersModel):
         data_path: str,
         input_image_height_width: tuple,
         batch_size: int,
-        num_classes: int,
+        use_all_classes: bool,
         num_loader_workers: int,
         subset_size: int,
         should_flip_train: bool,
@@ -38,7 +38,7 @@ class CRNFramework(MastersModel):
             data_path,
             input_image_height_width,
             batch_size,
-            num_classes,
+            use_all_classes,
             num_loader_workers,
             subset_size,
             should_flip_train,
@@ -90,7 +90,7 @@ class CRNFramework(MastersModel):
             "data_path": manager.args["dataset_path"],
             "input_image_height_width": manager.args["input_image_height_width"],
             "batch_size": manager.args["batch_size"],
-            "num_classes": manager.args["num_classes"],
+            "use_all_classes": manager.args["use_all_classes"],
             "num_loader_workers": manager.args["num_workers"],
             "subset_size": manager.args["training_subset"],
             "should_flip_train": manager.args["flip_training_images"],
@@ -132,6 +132,8 @@ class CRNFramework(MastersModel):
             subset_size=self.subset_size,
             noise=self.use_input_noise,
             dataset_features=dataset_features_dict,
+            specific_model="CRN",
+            use_all_classes=self.use_all_classes
         )
 
         self.data_loader_train: torch.utils.data.DataLoader = torch.utils.data.DataLoader(
@@ -139,7 +141,7 @@ class CRNFramework(MastersModel):
             batch_size=self.batch_size,
             shuffle=True,
             num_workers=self.num_loader_workers,
-            pin_memory=True,
+            pin_memory=True
         )
 
         self.__data_set_val__ = CityScapesDataset(
@@ -150,6 +152,8 @@ class CRNFramework(MastersModel):
             subset_size=0,
             noise=False,
             dataset_features=dataset_features_dict,
+            specific_model="CRN",
+            use_all_classes=self.use_all_classes
         )
 
         self.data_loader_val: torch.utils.data.DataLoader = torch.utils.data.DataLoader(
@@ -158,6 +162,8 @@ class CRNFramework(MastersModel):
             shuffle=True,
             num_workers=self.num_loader_workers,
         )
+
+        self.num_classes = self.__data_set_train__.num_output_classes
 
     def __set_model__(self, **kwargs) -> None:
 
@@ -169,7 +175,7 @@ class CRNFramework(MastersModel):
             num_classes=self.num_classes,
             num_inner_channels=self.num_inner_channels,
             use_feature_encoder=self.use_feature_encodings,
-            layer_norm_type=self.layer_norm_type
+            layer_norm_type=self.layer_norm_type,
         )
 
         # self.crn = nn.DataParallel(self.crn, device_ids=device_ids)
