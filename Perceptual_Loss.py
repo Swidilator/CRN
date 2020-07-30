@@ -6,13 +6,13 @@ import wandb
 
 
 class CircularList:
-    def __init__(self, input: int):
-        self.len = input
-        self.data: list = [1.0 for x in range(input)]
+    def __init__(self, list_len: int):
+        self.len = list_len
+        self.data: list = [1.0] * list_len
         self.pointer: int = 0
 
-    def update(self, input: float) -> None:
-        self.data[self.pointer] = input
+    def update(self, input_value: float) -> None:
+        self.data[self.pointer] = input_value
         if self.pointer + 1 == self.len:
             self.pointer = 0
         else:
@@ -26,11 +26,11 @@ class CircularList:
 
 
 def get_layer_values(
-    self: torch.nn.modules.conv.Conv2d, input: tuple, output: torch.Tensor
+    self: torch.nn.modules.conv.Conv2d, input_data: tuple, output_data: torch.Tensor
 ) -> None:
     # input is a tuple of packed inputs
     # output is a Tensor. output.data is the Tensor we are interested in
-    self.stored_output = output
+    self.stored_output = output_data
     pass
 
 
@@ -157,7 +157,6 @@ class PerceptualLossNetwork(modules.Module):
                     input=input_label[b], size=label_shape, mode="nearest"
                 )
 
-                # Todo label_interpolate[0] only works for batch size of 1
                 layer_loss: torch.Tensor = PerceptualLossNetwork.__calculate_loss(
                     result_gen[i], result_truth[i], label_interpolate,
                 )
