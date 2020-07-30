@@ -1,8 +1,8 @@
+from typing import Tuple, List, Optional, Union
+
 import torch
 import torch.nn as nn
-
 from math import log2
-from typing import Tuple, List, Any, Optional
 
 from CRN.Refinement_Module import RefinementModule
 from support_scripts.components import FeatureEncoder

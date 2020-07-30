@@ -1,16 +1,17 @@
-import torch
-from torchvision import transforms
-from typing import Tuple, List, Any, Union
-import wandb
-from tqdm import tqdm
 import os
-from PIL import ImageFile
 from contextlib import nullcontext
+from typing import Tuple, Any, Union
 
-from CRN.Perceptual_Loss import PerceptualLossNetwork
+import torch
+import wandb
+from PIL import ImageFile
+from torchvision import transforms
+from tqdm import tqdm
+
 from CRN.CRN_Network import CRN
-from support_scripts.utils import MastersModel, ModelSettingsManager
+from CRN.Perceptual_Loss import PerceptualLossNetwork
 from support_scripts.components import CityScapesDataset
+from support_scripts.utils import MastersModel, ModelSettingsManager
 
 ImageFile.LOAD_TRUNCATED_IMAGES = True
 

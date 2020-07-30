@@ -1,9 +1,10 @@
+from typing import Tuple
+
 import torch
 import torch.nn as nn
 
-# from apex.normalization import FusedLayerNorm
 
-from typing import Tuple, List, Any
+# from apex.normalization import FusedLayerNorm
 
 
 class LayerNorm(nn.Module):
