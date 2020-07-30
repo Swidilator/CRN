@@ -71,7 +71,7 @@ class CRNFramework(MastersModel):
         self.perceptual_base_model: str = kwargs["perceptual_base_model"]
         self.use_feature_encodings: bool = kwargs["use_feature_encodings"]
         self.use_loss_output_image: bool = kwargs["use_loss_output_image"]
-        self.layer_norm_type: bool = kwargs["layer_norm_type"]
+        self.layer_norm_type: str = kwargs["layer_norm_type"]
 
         self.__set_data_loader__()
 
@@ -134,7 +134,7 @@ class CRNFramework(MastersModel):
             noise=self.use_input_noise,
             dataset_features=dataset_features_dict,
             specific_model="CRN",
-            use_all_classes=self.use_all_classes
+            use_all_classes=self.use_all_classes,
         )
 
         self.data_loader_train: torch.utils.data.DataLoader = torch.utils.data.DataLoader(
@@ -142,7 +142,7 @@ class CRNFramework(MastersModel):
             batch_size=self.batch_size,
             shuffle=True,
             num_workers=self.num_loader_workers,
-            pin_memory=True
+            pin_memory=True,
         )
 
         self.__data_set_val__ = CityScapesDataset(
@@ -154,7 +154,7 @@ class CRNFramework(MastersModel):
             noise=False,
             dataset_features=dataset_features_dict,
             specific_model="CRN",
-            use_all_classes=self.use_all_classes
+            use_all_classes=self.use_all_classes,
         )
 
         self.data_loader_val: torch.utils.data.DataLoader = torch.utils.data.DataLoader(
@@ -326,22 +326,23 @@ class CRNFramework(MastersModel):
         return loss_total, None
 
     def eval(self) -> Tuple[float, Any]:
-        self.crn.eval()
-        with torch.no_grad():
-            loss_total: torch.Tensor = torch.Tensor([0.0]).to(self.device)
-        for batch_idx, (img, msk) in enumerate(self.data_loader_val):
-            img: torch.Tensor = img.to(self.device)
-            msk: torch.Tensor = msk.to(self.device)
-
-            out: torch.Tensor = self.crn(inputs=(msk, None))
-
-            img = CRNFramework.__normalise__(img)
-            out = CRNFramework.__normalise__(out)
-
-            loss: torch.Tensor = self.loss_net((out, img))
-            loss_total = loss_total + loss
-            del loss, msk, img
-        return loss_total.item(), None
+        # self.crn.eval()
+        # with torch.no_grad():
+        #     loss_total: torch.Tensor = torch.Tensor([0.0]).to(self.device)
+        # for batch_idx, (img, msk) in enumerate(self.data_loader_val):
+        #     img: torch.Tensor = img.to(self.device)
+        #     msk: torch.Tensor = msk.to(self.device)
+        #
+        #     out: torch.Tensor = self.crn(inputs=(msk, None))
+        #
+        #     img = CRNFramework.__normalise__(img)
+        #     out = CRNFramework.__normalise__(out)
+        #
+        #     loss: torch.Tensor = self.loss_net((out, img))
+        #     loss_total = loss_total + loss.detach()
+        #     del loss, msk, img
+        # return loss_total.item(), None
+        pass
 
     def sample(self, image_number: int, **kwargs: dict) -> dict:
         # Retrieve setting from kwargs
@@ -377,7 +378,7 @@ class CRNFramework(MastersModel):
             feature_selection = feature_selection.to(self.device).unsqueeze(0)
         else:
             if self.use_feature_encodings:
-                feature_selection: torch.Tensor = self.crn.feature_encoder(
+                feature_selection: Union[torch.Tensor, None] = self.crn.feature_encoder(
                     original_img, instance_original
                 )
             else:
@@ -430,13 +431,17 @@ class CRNFramework(MastersModel):
         return image
 
     @staticmethod
-    def __normalise__(input: torch.Tensor) -> torch.Tensor:
+    def __normalise__(input_tensor: torch.Tensor) -> torch.Tensor:
         mean = [0.485, 0.456, 0.406]
         std = [0.229, 0.224, 0.225]
 
-        if len(input.shape) == 4:
-            for i in range(input.shape[0]):
-                input[i] = CRNFramework.__single_image_normalise__(input[i], mean, std)
+        if len(input_tensor.shape) == 4:
+            for i in range(input_tensor.shape[0]):
+                input_tensor[i] = CRNFramework.__single_image_normalise__(
+                    input_tensor[i], mean, std
+                )
         else:
-            input = CRNFramework.__single_image_normalise__(input, mean, std)
-        return input
+            input_tensor = CRNFramework.__single_image_normalise__(
+                input_tensor, mean, std
+            )
+        return input_tensor
