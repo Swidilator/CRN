@@ -173,11 +173,16 @@ class RefinementModule(nn.Module):
         # print(size_list)
         return torch.Size(size_list)
 
-    def forward(self, inputs: Tuple[torch.Tensor, torch.Tensor, torch.Tensor]):
-        # Separate inputs
-        mask: torch.Tensor = inputs[0]
-        feature_selection: torch.Tensor = inputs[1]
-        prior_layers: torch.Tensor = inputs[2]
+    def forward(
+        self,
+        mask: torch.Tensor,
+        prior_layers: torch.Tensor,
+        feature_selection: torch.Tensor,
+    ):
+        # # Separate inputs
+        # mask: torch.Tensor = inputs[0]
+        # feature_selection: torch.Tensor = inputs[1]
+        # prior_layers: torch.Tensor = inputs[2]
 
         # Downsample mask for current RM
         mask = torch.nn.functional.interpolate(

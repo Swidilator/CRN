@@ -280,7 +280,7 @@ class CRNFramework(MastersModel):
             instance: torch.Tensor = instance.to(self.device)
 
             with self.torch_amp_autocast():
-                out: torch.Tensor = self.crn(inputs=(msk, img, instance, None))
+                out: torch.Tensor = self.crn(msk, img, instance, None)
                 # transform = transforms.ToPILImage()
                 # image_output = out[0].detach().cpu()
                 # tf_image = transform(torch.nn.functional.tanh(image_output))
@@ -384,9 +384,7 @@ class CRNFramework(MastersModel):
             else:
                 feature_selection = None
 
-        img_out: torch.Tensor = self.crn.sample_using_extracted_features(
-            msk, feature_selection, None
-        )
+        img_out: torch.Tensor = self.crn.generate_output(msk, feature_selection, None)
 
         # Drop batch dimension
         img_out = img_out.squeeze(0).cpu()

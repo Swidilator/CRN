@@ -87,13 +87,13 @@ class CRN(torch.nn.Module):
         if self.use_tanh:
             self.tan_h = nn.Tanh()
 
-    def forward(self, inputs: List[torch.Tensor]):
-        msk, real_img, instance_original = (
-            inputs[0],
-            inputs[1],
-            inputs[2],
-        )
-        noise: torch.Tensor = inputs[3]
+    def forward(self, msk, real_img, instance_original, noise):
+        # msk, real_img, instance_original = (
+        #     inputs[0],
+        #     inputs[1],
+        #     inputs[2],
+        # )
+        # noise: torch.Tensor = inputs[3]
 
         if self.use_feature_encoder:
             feature_selection: Optional[torch.Tensor] = self.feature_encoder(
@@ -104,7 +104,15 @@ class CRN(torch.nn.Module):
 
         return self.generate_output(msk, feature_selection, noise)
 
-    def sample_using_extracted_features(
+    # def sample_using_extracted_features(
+    #     self,
+    #     msk: torch.Tensor,
+    #     feature_selection: torch.Tensor,
+    #     noise: Union[torch.Tensor, None],
+    # ):
+    #     return self.generate_output(msk, feature_selection, noise)
+
+    def generate_output(
         self,
         msk: torch.Tensor,
         feature_selection: torch.Tensor,
@@ -116,9 +124,9 @@ class CRN(torch.nn.Module):
         self, msk: torch.Tensor, feature_selection: torch.Tensor, noise: torch.Tensor,
     ) -> torch.Tensor:
 
-        output: torch.Tensor = self.rms_list[0]([msk, feature_selection, noise])
+        output: torch.Tensor = self.rms_list[0](msk, noise, feature_selection)
         for i in range(1, len(self.rms_list)):
-            output = self.rms_list[i]([msk, feature_selection, output])
+            output = self.rms_list[i](msk, output, feature_selection)
 
         # TODO Clean up
         # output = (output + 1.0) / 2.0 * 255.0
