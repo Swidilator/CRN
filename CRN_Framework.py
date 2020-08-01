@@ -288,6 +288,10 @@ class CRNFramework(MastersModel):
                 # plt.imshow(tf_image)
                 # plt.show()
 
+                # Normalise images to correct domain of pretrained networks
+                img = (img + 1.0) / 2.0
+                out = (out + 1.0) / 2.0
+
                 img = self.normalise(img.squeeze(dim=0)).unsqueeze(0)
 
                 for i in range(out.shape[0]):
