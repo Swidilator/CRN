@@ -281,16 +281,6 @@ class CRNFramework(MastersModel):
 
             with self.torch_amp_autocast():
                 out: torch.Tensor = self.crn(msk, img, instance, None)
-                # transform = transforms.ToPILImage()
-                # image_output = out[0].detach().cpu()
-                # tf_image = transform(torch.nn.functional.tanh(image_output))
-                # # plt.imshow((((output[0] + output[0].min()) / (output[0].max() / 2)) - 1).cpu().permute(1,2,0).detach())
-                # plt.imshow(tf_image)
-                # plt.show()
-
-                # Normalise images to correct domain of pretrained networks
-                img = (img + 1.0) / 2.0
-                out = (out + 1.0) / 2.0
 
                 img = self.normalise(img.squeeze(dim=0)).unsqueeze(0)
 
