@@ -131,4 +131,5 @@ class CRN(torch.nn.Module):
         # TanH for squeezing outputs to [-1, 1]
         if self.use_tanh:
             output = self.tan_h(output).clone()
+        output = (output + 1.0) / 2.0
         return output
