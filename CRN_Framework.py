@@ -282,11 +282,12 @@ class CRNFramework(MastersModel):
             with self.torch_amp_autocast():
                 out: torch.Tensor = self.crn(msk, img, instance, None)
 
-                img = self.normalise(img.squeeze(dim=0)).unsqueeze(0)
+                for b in range(img.shape[0]):
+                    img[b] = self.normalise(img[b])
 
-                for i in range(out.shape[0]):
-                    for j in range(out.shape[1]):
-                        out[i, j] = self.normalise(out[i, j])
+                for b in range(out.shape[0]):
+                    for out_img in range(out.shape[1]):
+                        out[b, out_img] = self.normalise(out[b, out_img])
 
                 loss: torch.Tensor = self.loss_net((out, img, msk))
             # with amp.scale_loss(loss, self.optimizer) as scaled_loss:
