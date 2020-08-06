@@ -194,7 +194,10 @@ class RefinementModule(nn.Module):
         x: torch.Tensor = mask
         if prior_layers is not None:
             prior_layers = torch.nn.functional.interpolate(
-                input=prior_layers, size=self.input_height_width, mode="bilinear", align_corners=True
+                input=prior_layers,
+                size=self.input_height_width,
+                mode="bilinear",
+                align_corners=True,
             )
             x = torch.cat((x, prior_layers), dim=1)
         if self.use_feature_encoder:
