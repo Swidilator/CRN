@@ -382,7 +382,9 @@ class CRNFramework(MastersModel):
         img_out: torch.Tensor = self.crn.generate_output(msk, feature_selection, None)
 
         # Cut down pixels to correct extremes
-        img_out = img_out.max(torch.tensor(0.0).to(self.device)).min(torch.tensor(1.0).to(self.device))
+        img_out = img_out.max(torch.tensor(0.0).to(self.device)).min(
+            torch.tensor(1.0).to(self.device)
+        )
 
         # Drop batch dimension
         img_out = img_out.squeeze(0).cpu()

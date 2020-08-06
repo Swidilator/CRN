@@ -123,13 +123,13 @@ class CRN(torch.nn.Module):
         for i in range(1, len(self.rms_list)):
             output = self.rms_list[i](msk, output, feature_selection)
 
-        # TODO Clean up
-        # output = (output + 1.0) / 2.0 * 255.0
         a, b, c = torch.chunk(output.permute(1, 0, 2, 3).unsqueeze(0), 3, 1)
         output = torch.cat((a, b, c), 2)
 
         # TanH for squeezing outputs to [-1, 1]
         if self.use_tanh:
             output = self.tan_h(output).clone()
+
+        # Squeeze output to [0,1]
         output = (output + 1.0) / 2.0
         return output
