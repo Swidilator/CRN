@@ -78,6 +78,14 @@ class CRNFramework(MastersModel):
         self.__set_model__()
 
     @property
+    def data_set_train(self) -> torch.utils.data.Dataset:
+        return self.__data_set_train__
+
+    @property
+    def data_set_val(self) -> torch.utils.data.Dataset:
+        return self.__data_set_val__
+
+    @property
     def wandb_trainable_model(self) -> tuple:
         return (self.crn,)
 
