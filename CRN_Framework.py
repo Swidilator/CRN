@@ -265,6 +265,9 @@ class CRNFramework(MastersModel):
 
         loss_total: float = 0.0
 
+        img: torch.Tensor
+        msk: torch.Tensor
+        instance: torch.Tensor
         for batch_idx, (img, msk, _, instance, _, _) in enumerate(
             tqdm(self.data_loader_train, desc="Training")
         ):
@@ -275,9 +278,9 @@ class CRNFramework(MastersModel):
 
             self.crn.zero_grad()
 
-            img: torch.Tensor = img.to(self.device)
-            msk: torch.Tensor = msk.to(self.device)
-            instance: torch.Tensor = instance.to(self.device)
+            img = img.to(self.device)
+            msk = msk.to(self.device)
+            instance = instance.to(self.device)
 
             with self.torch_amp_autocast():
                 out: torch.Tensor = self.crn(msk, img, instance, None)
@@ -289,7 +292,7 @@ class CRNFramework(MastersModel):
                     for out_img in range(out.shape[1]):
                         out[b, out_img] = self.normalise(out[b, out_img])
 
-                loss: torch.Tensor = self.loss_net((out, img, msk))
+                loss: torch.Tensor = self.loss_net(out, img, msk)
             # with amp.scale_loss(loss, self.optimizer) as scaled_loss:
             #     scaled_loss.backward()
             if self.use_amp == "torch":
@@ -395,13 +398,12 @@ class CRNFramework(MastersModel):
         original_img = original_img.squeeze(0).cpu()
         # msk = msk.squeeze(0).argmax(0, keepdim=True).float().cpu()
         msk_colour = msk_colour.float().cpu()
-        if self.use_feature_encodings:
-            feature_selection = feature_selection.squeeze(0).cpu()
 
         output_img_dict: dict = {
             "output_img_{i}".format(i=i): img for i, img in enumerate(split_images)
         }
         if self.use_feature_encodings:
+            feature_selection = feature_selection.squeeze(0).cpu()
             output_img_dict.update({"feature_selection": transform(feature_selection)})
 
         output_dict: dict = {

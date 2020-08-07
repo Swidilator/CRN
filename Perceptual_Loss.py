@@ -120,10 +120,12 @@ class PerceptualLossNetwork(modules.Module):
 
         return outputs
 
-    def forward(self, inputs: tuple):
-        input_gen: torch.Tensor = inputs[0]
-        input_truth: torch.Tensor = inputs[1]
-        input_label: torch.Tensor = inputs[2]
+    def forward(
+        self,
+        input_gen: torch.Tensor,
+        input_truth: torch.Tensor,
+        input_label: torch.Tensor,
+    ):
 
         # img_losses: list = []
         this_batch_size = input_gen.shape[0]
