@@ -88,13 +88,6 @@ class CRN(torch.nn.Module):
             self.tan_h = nn.Tanh()
 
     def forward(self, msk, real_img, instance_original, noise):
-        # msk, real_img, instance_original = (
-        #     inputs[0],
-        #     inputs[1],
-        #     inputs[2],
-        # )
-        # noise: torch.Tensor = inputs[3]
-
         if self.use_feature_encoder:
             feature_selection: Optional[torch.Tensor] = self.feature_encoder(
                 real_img, instance_original
@@ -103,14 +96,6 @@ class CRN(torch.nn.Module):
             feature_selection: Optional[torch.Tensor] = None
 
         return self.generate_output(msk, feature_selection, noise)
-
-    # def sample_using_extracted_features(
-    #     self,
-    #     msk: torch.Tensor,
-    #     feature_selection: torch.Tensor,
-    #     noise: Union[torch.Tensor, None],
-    # ):
-    #     return self.generate_output(msk, feature_selection, noise)
 
     def generate_output(
         self,

@@ -1,10 +1,5 @@
-from typing import Tuple
-
 import torch
 import torch.nn as nn
-
-
-# from apex.normalization import FusedLayerNorm
 
 
 class LayerNorm(nn.Module):
@@ -111,6 +106,9 @@ class RefinementModule(nn.Module):
                 affine=False,
                 track_running_stats=False,
             )
+        elif norm_type == "weight":
+            self.norm_1 = lambda x: x
+            self.conv_1 = nn.utils.weight_norm(self.conv_1)
 
         self.leakyReLU_1 = nn.LeakyReLU(negative_slope=0.2, inplace=True)
 
@@ -145,6 +143,9 @@ class RefinementModule(nn.Module):
                 affine=False,
                 track_running_stats=False,
             )
+        elif norm_type == "weight":
+            self.norm_2 = lambda x: x
+            self.conv_2 = nn.utils.weight_norm(self.conv_2)
 
         self.leakyReLU_2 = nn.LeakyReLU(negative_slope=0.2, inplace=True)
 
@@ -179,14 +180,12 @@ class RefinementModule(nn.Module):
         prior_layers: torch.Tensor,
         feature_selection: torch.Tensor,
     ):
-        # # Separate inputs
-        # mask: torch.Tensor = inputs[0]
-        # feature_selection: torch.Tensor = inputs[1]
-        # prior_layers: torch.Tensor = inputs[2]
 
         # Downsample mask for current RM
         mask = torch.nn.functional.interpolate(
-            input=mask, size=self.input_height_width, mode="nearest"
+            input=mask,
+            size=self.input_height_width,
+            mode="nearest"
         )
 
         # If there are prior layers, upsample them and concatenate them onto the mask input
@@ -202,7 +201,10 @@ class RefinementModule(nn.Module):
             x = torch.cat((x, prior_layers), dim=1)
         if self.use_feature_encoder:
             feature_selection = torch.nn.functional.interpolate(
-                input=feature_selection, size=self.input_height_width, mode="nearest"
+                input=feature_selection,
+                size=self.input_height_width,
+                mode="nearest",
+                align_corners=True,
             )
             x = torch.cat((x, feature_selection), dim=1)
 
