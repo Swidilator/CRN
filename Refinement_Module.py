@@ -203,8 +203,7 @@ class RefinementModule(nn.Module):
             feature_selection = torch.nn.functional.interpolate(
                 input=feature_selection,
                 size=self.input_height_width,
-                mode="nearest",
-                align_corners=True,
+                mode="nearest"
             )
             x = torch.cat((x, feature_selection), dim=1)
 
