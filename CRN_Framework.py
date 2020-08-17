@@ -20,34 +20,38 @@ class CRNFramework(MastersModel):
     def __init__(
         self,
         device: torch.device,
-        data_path: str,
+        dataset_path: str,
         input_image_height_width: tuple,
         batch_size: int,
         use_all_classes: bool,
-        num_loader_workers: int,
-        subset_size: int,
-        should_flip_train: bool,
+        num_data_workers: int,
+        training_subset_size: int,
+        flip_training_images: bool,
         use_tanh: bool,
-        use_input_noise: bool,
+        use_input_image_noise: bool,
         sample_only: bool,
         use_amp: Union[str, bool],
         log_every_n_steps: int,
+        model_save_dir: str,
+        image_save_dir: str,
         **kwargs,
     ):
         super(CRNFramework, self).__init__(
             device,
-            data_path,
+            dataset_path,
             input_image_height_width,
             batch_size,
             use_all_classes,
-            num_loader_workers,
-            subset_size,
-            should_flip_train,
+            num_data_workers,
+            training_subset_size,
+            flip_training_images,
             use_tanh,
-            use_input_noise,
+            use_input_image_noise,
             sample_only,
             use_amp,
             log_every_n_steps,
+            model_save_dir,
+            image_save_dir,
         )
         self.model_name: str = "CRN"
 
@@ -94,22 +98,23 @@ class CRNFramework(MastersModel):
         cls, manager: ModelSettingsManager
     ) -> "CRNFramework":
 
-        model_frame_args: dict = {
-            "device": manager.device,
-            "data_path": manager.args["dataset_path"],
-            "input_image_height_width": manager.args["input_image_height_width"],
-            "batch_size": manager.args["batch_size"],
-            "use_all_classes": manager.args["use_all_classes"],
-            "num_loader_workers": manager.args["num_workers"],
-            "subset_size": manager.args["training_subset"],
-            "should_flip_train": manager.args["flip_training_images"],
-            "use_tanh": not manager.args["no_tanh"],
-            "use_input_noise": manager.args["input_image_noise"],
-            "sample_only": manager.args["sample_only"],
-            "use_amp": manager.args["use_amp"],
-            "log_every_n_steps": manager.args["log_every_n_steps"],
-        }
-
+        # model_frame_args: dict = {
+        #     "device": manager.device,
+        #     "data_path": manager.args["dataset_path"],
+        #     "input_image_height_width": manager.args["input_image_height_width"],
+        #     "batch_size": manager.args["batch_size"],
+        #     "use_all_classes": manager.args["use_all_classes"],
+        #     "num_loader_workers": manager.args["num_workers"],
+        #     "subset_size": manager.args["training_subset"],
+        #     "should_flip_train": manager.args["flip_training_images"],
+        #     "use_tanh": not manager.args["no_tanh"],
+        #     "use_input_noise": manager.args["input_image_noise"],
+        #     "sample_only": manager.args["sample_only"],
+        #     "use_amp": manager.args["use_amp"],
+        #     "log_every_n_steps": manager.args["log_every_n_steps"],
+        #     "model_dir": manager.args["model_dir"],
+        # }
+        #
         settings = {
             "input_tensor_size": (
                 manager.model_conf["CRN_INPUT_TENSOR_SIZE_HEIGHT"],
@@ -123,7 +128,7 @@ class CRNFramework(MastersModel):
             "use_loss_output_image": manager.model_conf["CRN_USE_LOSS_OUTPUT_IMAGE"],
             "layer_norm_type": manager.model_conf["CRN_LAYER_NORM_TYPE"],
         }
-        return cls(**model_frame_args, **settings)
+        return cls(**manager.args, **settings)
 
     def __set_data_loader__(self, **kwargs):
 
@@ -135,11 +140,11 @@ class CRNFramework(MastersModel):
 
         self.__data_set_train__ = CityScapesDataset(
             output_image_height_width=self.input_image_height_width,
-            root=self.data_path,
+            root=self.dataset_path,
             split="train",
-            should_flip=self.should_flip_train,
-            subset_size=self.subset_size,
-            noise=self.use_input_noise,
+            should_flip=self.flip_training_images,
+            subset_size=self.training_subset_size,
+            noise=self.use_input_image_noise,
             dataset_features=dataset_features_dict,
             specific_model="CRN",
             use_all_classes=self.use_all_classes,
@@ -149,13 +154,13 @@ class CRNFramework(MastersModel):
             self.__data_set_train__,
             batch_size=self.batch_size,
             shuffle=True,
-            num_workers=self.num_loader_workers,
+            num_workers=self.num_data_workers,
             pin_memory=True,
         )
 
         self.__data_set_val__ = CityScapesDataset(
             output_image_height_width=self.input_image_height_width,
-            root=self.data_path,
+            root=self.dataset_path,
             split="val",
             should_flip=False,
             subset_size=0,
@@ -169,7 +174,7 @@ class CRNFramework(MastersModel):
             self.__data_set_val__,
             batch_size=self.batch_size,
             shuffle=True,
-            num_workers=self.num_loader_workers,
+            num_workers=self.num_data_workers,
         )
 
         self.num_classes = self.__data_set_train__.num_output_classes
@@ -245,18 +250,21 @@ class CRNFramework(MastersModel):
         if epoch >= 0:
             # Todo add support for manager.args["model_save_prefix"]
             epoch_file_name: str = os.path.join(
-                model_dir, self.model_name + "_Epoch_{epoch}.pt".format(epoch=epoch)
+                self.model_save_dir,
+                self.model_name + "_Epoch_{epoch}.pt".format(epoch=epoch),
             )
             torch.save(save_dict, epoch_file_name)
 
-        latest_file_name: str = os.path.join(model_dir, self.model_name + "_Latest.pt")
+        latest_file_name: str = os.path.join(
+            self.model_save_dir, self.model_name + "_Latest.pt"
+        )
         torch.save(save_dict, latest_file_name)
 
     def load_model(self, model_dir: str, model_file_name: str) -> None:
         super().load_model(model_dir, model_file_name)
 
         checkpoint = torch.load(
-            os.path.join(model_dir, model_file_name), map_location=self.device
+            os.path.join(self.model_save_dir, model_file_name), map_location=self.device
         )
         self.crn.load_state_dict(checkpoint["dict_crn"])
         if not self.sample_only:
@@ -313,7 +321,7 @@ class CRNFramework(MastersModel):
 
             loss_total += loss.item() * self.batch_size
 
-            if batch_idx % self.log_evey_n_steps == 0 or batch_idx == (
+            if batch_idx % self.log_every_n_steps == 0 or batch_idx == (
                 len(self.data_loader_train) - 1
             ):
                 batch_loss_val: float = loss.item()
