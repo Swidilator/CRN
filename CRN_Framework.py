@@ -233,8 +233,8 @@ class CRNFramework(MastersModel):
         # Empty cache for cleanup
         torch.cuda.empty_cache()
 
-    def save_model(self, model_dir: str, epoch: int = -1) -> None:
-        super().save_model(model_dir)
+    def save_model(self, epoch: int = -1) -> None:
+        super().save_model()
 
         try:
             assert not self.sample_only
@@ -260,8 +260,8 @@ class CRNFramework(MastersModel):
         )
         torch.save(save_dict, latest_file_name)
 
-    def load_model(self, model_dir: str, model_file_name: str) -> None:
-        super().load_model(model_dir, model_file_name)
+    def load_model(self, model_file_name: str) -> None:
+        super().load_model(model_file_name)
 
         checkpoint = torch.load(
             os.path.join(self.model_save_dir, model_file_name), map_location=self.device
