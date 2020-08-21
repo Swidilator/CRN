@@ -263,9 +263,12 @@ class CRNFramework(MastersModel):
     def load_model(self, model_file_name: str) -> None:
         super().load_model(model_file_name)
 
-        checkpoint = torch.load(
-            os.path.join(self.model_save_dir, model_file_name), map_location=self.device
-        )
+        # Create final model file path and output
+        load_path: str = os.path.join(self.model_save_dir, model_file_name)
+        print("Loading model:")
+        print(load_path)
+
+        checkpoint = torch.load(load_path, map_location=self.device)
         self.crn.load_state_dict(checkpoint["dict_crn"])
         if not self.sample_only:
             self.loss_net.loss_layer_scales = checkpoint["loss_layer_scales"]
