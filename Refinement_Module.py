@@ -183,9 +183,7 @@ class RefinementModule(nn.Module):
 
         # Downsample mask for current RM
         mask = torch.nn.functional.interpolate(
-            input=mask,
-            size=self.input_height_width,
-            mode="nearest"
+            input=mask, size=self.input_height_width, mode="nearest"
         )
 
         # If there are prior layers, upsample them and concatenate them onto the mask input
@@ -201,9 +199,7 @@ class RefinementModule(nn.Module):
             x = torch.cat((x, prior_layers), dim=1)
         if self.use_feature_encoder:
             feature_selection = torch.nn.functional.interpolate(
-                input=feature_selection,
-                size=self.input_height_width,
-                mode="nearest"
+                input=feature_selection, size=self.input_height_width, mode="nearest"
             )
             x = torch.cat((x, feature_selection), dim=1)
 
