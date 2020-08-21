@@ -53,11 +53,11 @@ class PerceptualLossNetwork(modules.Module):
         if self.base_model == "VGG":
             vgg = torchvision.models.vgg19(pretrained=True, progress=True)
             self.feature_network = vgg.features[0:32]
-            del vgg
+            # del vgg
         elif self.base_model == "MobileNet":
             mobile_net = torchvision.models.mobilenet_v2(pretrained=True, progress=True)
             self.feature_network = mobile_net.features[0:17]
-            del mobile_net
+            # del mobile_net
 
         for param in self.feature_network.parameters():
             param.requires_grad = False
@@ -78,6 +78,7 @@ class PerceptualLossNetwork(modules.Module):
                 self.output_feature_layers.append(self.feature_network[i].conv[2])
 
         self.loss_layer_history: list = []
+
         # Values taken from official source code, no idea how they got them
         self.loss_layer_scales = [1.6, 2.3, 1.8, 2.8, 0.08, 1.0]
 
@@ -116,7 +117,7 @@ class PerceptualLossNetwork(modules.Module):
         outputs: list = []
         for layer in self.output_feature_layers:
             outputs.append(layer.stored_output.clone())
-            del layer.stored_output
+            # del layer.stored_output
 
         return outputs
 
