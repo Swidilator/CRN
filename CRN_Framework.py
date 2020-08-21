@@ -1,6 +1,7 @@
 import os
 from contextlib import nullcontext
-from typing import Tuple, Any, Union
+from itertools import chain
+from typing import Tuple, Any, Union, Optional
 
 import torch
 import wandb
@@ -10,7 +11,7 @@ from tqdm import tqdm
 
 from CRN.CRN_Network import CRN
 from CRN.Perceptual_Loss import PerceptualLossNetwork
-from support_scripts.components import CityScapesDataset
+from support_scripts.components import CityScapesDataset, FeatureEncoder
 from support_scripts.utils import MastersModel, ModelSettingsManager
 
 ImageFile.LOAD_TRUNCATED_IMAGES = True
@@ -68,6 +69,7 @@ class CRNFramework(MastersModel):
             print("Missing argument: {error}".format(error=e))
             raise SystemExit
 
+        # fmt: off
         self.input_tensor_size: tuple = kwargs["input_tensor_size"]
         self.num_output_images: int = kwargs["num_output_images"]
         self.num_inner_channels: int = kwargs["num_inner_channels"]
@@ -76,6 +78,8 @@ class CRNFramework(MastersModel):
         self.use_feature_encodings: bool = kwargs["use_feature_encodings"]
         self.use_loss_output_image: bool = kwargs["use_loss_output_image"]
         self.layer_norm_type: str = kwargs["layer_norm_type"]
+        self.use_saved_feature_encodings: bool = kwargs["use_saved_feature_encodings"]
+        # fmt: on
 
         self.__set_data_loader__()
 
@@ -112,9 +116,10 @@ class CRNFramework(MastersModel):
         #     "sample_only": manager.args["sample_only"],
         #     "use_amp": manager.args["use_amp"],
         #     "log_every_n_steps": manager.args["log_every_n_steps"],
-        #     "model_dir": manager.args["model_dir"],
+        #     "model_save_dir": manager.args["model_save_dir"],
         # }
         #
+        # fmt: off
         settings = {
             "input_tensor_size": (
                 manager.model_conf["CRN_INPUT_TENSOR_SIZE_HEIGHT"],
@@ -127,7 +132,10 @@ class CRNFramework(MastersModel):
             "use_feature_encodings": manager.model_conf["CRN_USE_FEATURE_ENCODINGS"],
             "use_loss_output_image": manager.model_conf["CRN_USE_LOSS_OUTPUT_IMAGE"],
             "layer_norm_type": manager.model_conf["CRN_LAYER_NORM_TYPE"],
+            "use_saved_feature_encodings": manager.model_conf["CRN_USE_SAVED_FEATURE_ENCODINGS"],
         }
+        # fmt: on
+
         return cls(**manager.args, **settings)
 
     def __set_data_loader__(self, **kwargs):
@@ -135,7 +143,7 @@ class CRNFramework(MastersModel):
         dataset_features_dict: dict = {
             "instance_map": True,
             "instance_map_processed": False,
-            "feature_extractions": {"use": False, "file_path": None},
+            # "feature_extractions": {"use": False, "file_path": None},
         }
 
         self.__data_set_train__ = CityScapesDataset(
@@ -181,6 +189,25 @@ class CRNFramework(MastersModel):
 
     def __set_model__(self, **kwargs) -> None:
 
+        # Feature Encoder
+        if self.use_feature_encodings:
+            self.feature_encoder: FeatureEncoder = FeatureEncoder(
+                3,
+                3,
+                4,
+                self.device,
+                self.model_save_dir,
+                self.use_saved_feature_encodings,
+            )
+            self.feature_encoder = self.feature_encoder.to(self.device)
+            if self.use_saved_feature_encodings:
+                self.feature_encoder.eval()
+                for param in self.feature_encoder.parameters():
+                    param.requires_grad = False
+            else:
+                for param in self.feature_encoder.parameters():
+                    param.requires_grad = True
+
         self.crn: CRN = CRN(
             use_tanh=self.use_tanh,
             input_tensor_size=self.input_tensor_size,
@@ -209,12 +236,14 @@ class CRNFramework(MastersModel):
 
             # self.optimizer = torch.optim.SGD(self.crn.parameters(), lr=0.01, momentum=0.9)
 
+            # Create params depending on what needs to be trained
+            params = self.crn.parameters()
+
+            if self.use_feature_encodings and not self.use_saved_feature_encodings:
+                params = chain(params, self.feature_encoder.parameters(),)
+
             self.optimizer = torch.optim.Adam(
-                self.crn.parameters(),
-                lr=0.0001,
-                betas=(0.9, 0.999),
-                eps=1e-08,
-                weight_decay=0,
+                params, lr=0.0001, betas=(0.9, 0.999), eps=1e-08, weight_decay=0,
             )
 
             self.normalise = transforms.Normalize(
@@ -246,6 +275,10 @@ class CRNFramework(MastersModel):
             "loss_layer_scales": self.loss_net.loss_layer_scales,
             "loss_history": self.loss_net.loss_layer_history,
         }
+        if self.use_feature_encodings:
+            save_dict.update(
+                {"dict_encoder_decoder": self.feature_encoder.state_dict()}
+            )
 
         if epoch >= 0:
             # Todo add support for manager.args["model_save_prefix"]
@@ -270,6 +303,8 @@ class CRNFramework(MastersModel):
 
         checkpoint = torch.load(load_path, map_location=self.device)
         self.crn.load_state_dict(checkpoint["dict_crn"])
+        if self.use_feature_encodings:
+            self.feature_encoder.load_state_dict(checkpoint["dict_encoder_decoder"])
         if not self.sample_only:
             self.loss_net.loss_layer_scales = checkpoint["loss_layer_scales"]
             self.loss_net.loss_layer_history = checkpoint["loss_history"]
@@ -284,25 +319,35 @@ class CRNFramework(MastersModel):
 
         loss_total: float = 0.0
 
-        img: torch.Tensor
-        msk: torch.Tensor
-        instance: torch.Tensor
-        for batch_idx, (img, msk, _, instance, _, _) in enumerate(
+        for batch_idx, input_dict in enumerate(
             tqdm(self.data_loader_train, desc="Training")
         ):
-            this_batch_size: int = img.shape[0]
+            this_batch_size: int = input_dict["img"].shape[0]
 
             if this_batch_size == 0:
                 break
 
             self.crn.zero_grad()
 
-            img = img.to(self.device)
-            msk = msk.to(self.device)
-            instance = instance.to(self.device)
+            img = input_dict["img"].to(self.device)
+            msk = input_dict["msk"].to(self.device)
+            instance = input_dict["inst"].to(self.device)
 
             with self.torch_amp_autocast():
-                out: torch.Tensor = self.crn(msk, img, instance, None)
+                feature_encoding: Optional[torch.Tensor]
+                if self.use_feature_encodings:
+                    feature_encoding: torch.Tensor = self.feature_encoder(
+                        img,
+                        instance,
+                        input_dict["img_id"]
+                        if self.use_saved_feature_encodings
+                        else None,
+                        input_dict["img_flipped"],
+                    )
+                else:
+                    feature_encoding = None
+
+                out: torch.Tensor = self.crn(msk, feature_encoding, noise=None)
 
                 for b in range(img.shape[0]):
                     img[b] = self.normalise(img[b])
@@ -362,11 +407,11 @@ class CRNFramework(MastersModel):
         pass
 
     def sample(self, image_number: int, **kwargs: dict) -> dict:
-        # Retrieve setting from kwargs
-        use_extracted_features: bool = bool(kwargs["use_extracted_features"])
 
         # Set CRN to eval mode
         self.crn.eval()
+        if self.use_feature_encodings:
+            self.feature_encoder.eval()
 
         # noise: torch.Tensor = torch.randn(
         #     1,
@@ -378,33 +423,29 @@ class CRNFramework(MastersModel):
         transform: transforms.ToPILImage = transforms.ToPILImage()
 
         # img, msk, msk_colour, instance, instance_processed, feature_selection
-        (
-            original_img,
-            msk,
-            msk_colour,
-            instance_original,
-            _,
-            feature_selection,
-        ) = self.__data_set_val__[image_number]
+        input_dict = self.__data_set_val__[image_number]
 
-        msk = msk.to(self.device).unsqueeze(0)
-        instance_original = instance_original.to(self.device).unsqueeze(0)
-        original_img = original_img.to(self.device).unsqueeze(0)
+        msk = input_dict["msk"].to(self.device).unsqueeze(0)
+        instance_original = input_dict["inst"].to(self.device).unsqueeze(0)
+        original_img = input_dict["img"].to(self.device).unsqueeze(0)
 
-        if use_extracted_features:
-            feature_selection = feature_selection.to(self.device).unsqueeze(0)
-        else:
-            if self.use_feature_encodings:
-                feature_selection: Union[torch.Tensor, None] = self.crn.feature_encoder(
-                    original_img, instance_original
+        feature_encoding: Optional[torch.Tensor]
+        if self.use_feature_encodings:
+            if self.use_saved_feature_encodings:
+                feature_encoding = self.feature_encoder.sample_using_means(
+                    instance_original
                 )
             else:
-                feature_selection = None
+                feature_encoding = self.feature_encoder(original_img, instance_original)
+        else:
+            feature_encoding = None
 
-        img_out: torch.Tensor = self.crn.generate_output(msk, feature_selection, None)
+        img_out: torch.Tensor = self.crn(msk, feature_encoding, None)
 
         # Clamp image to within correct bounds
         img_out = img_out.clamp(0.0, 1.0)
+        if self.use_feature_encodings:
+            feature_encoding = feature_encoding.clamp(0.0, 1.0)
 
         # Drop batch dimension
         img_out = img_out.squeeze(0).cpu()
@@ -414,14 +455,14 @@ class CRNFramework(MastersModel):
         # Bring images to CPU
         original_img = original_img.squeeze(0).cpu()
         # msk = msk.squeeze(0).argmax(0, keepdim=True).float().cpu()
-        msk_colour = msk_colour.float().cpu()
+        msk_colour = input_dict["msk_colour"].float().cpu()
 
         output_img_dict: dict = {
             "output_img_{i}".format(i=i): img for i, img in enumerate(split_images)
         }
         if self.use_feature_encodings:
-            feature_selection = feature_selection.squeeze(0).cpu()
-            output_img_dict.update({"feature_selection": transform(feature_selection)})
+            feature_encoding = feature_encoding.squeeze(0).cpu()
+            output_img_dict.update({"feature_selection": transform(feature_encoding)})
 
         output_dict: dict = {
             "image_index": image_number,
