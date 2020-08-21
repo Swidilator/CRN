@@ -34,10 +34,6 @@ class CRN(torch.nn.Module):
         self.__NUM_NOISE_CHANNELS__: int = 0
         self.__NUM_OUTPUT_IMAGE_CHANNELS__: int = 3
 
-        if self.use_feature_encoder:
-            # Todo Find better way of setting these parameters
-            self.feature_encoder: FeatureEncoder = FeatureEncoder(3, 3, 4)
-
         self.num_rms: int = int(log2(final_image_size[0])) - 1
 
         self.rms_list: nn.ModuleList = nn.ModuleList(
@@ -87,26 +83,16 @@ class CRN(torch.nn.Module):
         if self.use_tanh:
             self.tan_h = nn.Tanh()
 
-    def forward(self, msk, real_img, instance_original, noise):
-        if self.use_feature_encoder:
-            feature_selection: Optional[torch.Tensor] = self.feature_encoder(
-                real_img, instance_original
-            )
-        else:
-            feature_selection: Optional[torch.Tensor] = None
-
-        return self.generate_output(msk, feature_selection, noise)
-
-    def generate_output(
+    def forward(
         self,
         msk: torch.Tensor,
-        feature_selection: torch.Tensor,
-        noise: Union[torch.Tensor, None],
+        feature_encoding: torch.Tensor,
+        noise: Optional[torch.Tensor],
     ) -> torch.Tensor:
 
-        output: torch.Tensor = self.rms_list[0](msk, noise, feature_selection)
+        output: torch.Tensor = self.rms_list[0](msk, noise, feature_encoding)
         for i in range(1, len(self.rms_list)):
-            output = self.rms_list[i](msk, output, feature_selection)
+            output = self.rms_list[i](msk, output, feature_encoding)
 
         a, b, c = torch.chunk(output.permute(1, 0, 2, 3).unsqueeze(0), 3, 1)
         output = torch.cat((a, b, c), 2)
