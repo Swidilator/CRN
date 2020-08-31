@@ -447,8 +447,6 @@ class CRNFramework(MastersModel):
 
         # Clamp image to within correct bounds
         img_out = img_out.clamp(0.0, 1.0)
-        if self.use_feature_encodings:
-            feature_encoding = feature_encoding.clamp(0.0, 1.0)
 
         # Drop batch dimension
         img_out = img_out.squeeze(0).cpu()
