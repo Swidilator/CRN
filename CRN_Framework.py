@@ -95,7 +95,10 @@ class CRNFramework(MastersModel):
 
     @property
     def wandb_trainable_model(self) -> tuple:
-        return (self.crn,)
+        models = [self.crn]
+        if self.use_feature_encodings:
+            models.append(self.feature_encoder)
+        return tuple(models)
 
     @classmethod
     def from_model_settings_manager(
