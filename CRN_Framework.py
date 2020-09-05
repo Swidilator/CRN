@@ -305,7 +305,7 @@ class CRNFramework(MastersModel):
         print(load_path)
 
         checkpoint = torch.load(load_path, map_location=self.device)
-        self.crn.load_state_dict(checkpoint["dict_crn"])
+        self.crn.load_state_dict(checkpoint["dict_crn"], strict=False)
         if self.use_feature_encodings:
             self.feature_encoder.load_state_dict(checkpoint["dict_encoder_decoder"])
         if not self.sample_only:
@@ -350,7 +350,7 @@ class CRNFramework(MastersModel):
                 else:
                     feature_encoding = None
 
-                out: torch.Tensor = self.crn(msk, feature_encoding, noise=None)
+                out: torch.Tensor = self.crn(msk, feature_encoding)
 
                 for b in range(img.shape[0]):
                     img[b] = self.normalise(img[b])
@@ -443,7 +443,7 @@ class CRNFramework(MastersModel):
         else:
             feature_encoding = None
 
-        img_out: torch.Tensor = self.crn(msk, feature_encoding, None)
+        img_out: torch.Tensor = self.crn(msk, feature_encoding)
 
         # Clamp image to within correct bounds
         img_out = img_out.clamp(0.0, 1.0)

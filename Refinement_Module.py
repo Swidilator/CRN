@@ -1,49 +1,30 @@
 import torch
 import torch.nn as nn
 
+
 class RefinementModule(nn.Module):
-    r"""
-    One 3 layer module making up a segment of a CRN. Mask input tensor & prior layers get resized.
-
-    Args:
-        prior_layer_channel_count(int): number of input channels from previous layer
-        semantic_input_channel_count(int): number of input channels from semantic annotation
-        output_channel_count(int): number of output channels
-        input_height_width(tuple(int)): input image height and width
-        is_final_module(bool): is this the final module in the network
-    """
-
     def __init__(
         self,
-        semantic_input_channel_count: int,  # Number of channels from one-hot encoded semantic input
-        noise_input_channel_count: int,
+        semantic_input_channel_count: int,
         feature_encoder_input_channel_count: int,
-        base_inner_channel_count: int,
+        base_conv_channel_count: int,
+        prior_conv_channel_count: int,
         final_conv_output_channel_count: int,
-        first_rm: bool,
-        input_height_width: tuple,  # Input image height and width
+        input_height_width: tuple,
         norm_type: str,
     ):
         super(RefinementModule, self).__init__()
 
         self.input_height_width: tuple = input_height_width
-        self.transition_rms: bool = self.input_height_width[0] == 128
-
-        self.true_inner_channel_count: int = base_inner_channel_count if (
-            self.input_height_width[0] < 128
-        ) else base_inner_channel_count // 2
 
         # Total number of input channels
         self.total_input_channel_count: int = (
             semantic_input_channel_count
             + feature_encoder_input_channel_count
-            + noise_input_channel_count
-            + (
-                self.true_inner_channel_count * (self.transition_rms + 1)
-                if not first_rm
-                else 0
-            )
+            + prior_conv_channel_count
         )
+
+        self.base_conv_channel_count: int = base_conv_channel_count
 
         self.final_conv_output_channel_count: int = final_conv_output_channel_count
         self.use_feature_encoder: int = feature_encoder_input_channel_count > 0
@@ -53,7 +34,7 @@ class RefinementModule(nn.Module):
         # Module architecture
         self.conv_1 = nn.Conv2d(
             self.total_input_channel_count,
-            self.true_inner_channel_count,
+            self.base_conv_channel_count,
             kernel_size=3,
             stride=1,
             padding=1,
@@ -63,7 +44,7 @@ class RefinementModule(nn.Module):
         if norm_type == "full":
             self.norm_1 = nn.LayerNorm(
                 RefinementModule.change_output_channel_size(
-                    input_height_width, self.true_inner_channel_count
+                    input_height_width, self.base_conv_channel_count
                 ),
             )
         elif norm_type == "half":
@@ -71,10 +52,10 @@ class RefinementModule(nn.Module):
         elif norm_type == "none":
             self.norm_1 = lambda x: x
         elif norm_type == "group":
-            self.norm_1 = nn.GroupNorm(1, self.true_inner_channel_count)
+            self.norm_1 = nn.GroupNorm(1, self.base_conv_channel_count)
         elif norm_type == "instance":
             self.norm_1 = nn.InstanceNorm2d(
-                self.true_inner_channel_count,
+                self.base_conv_channel_count,
                 eps=1e-05,
                 momentum=0.1,
                 affine=False,
@@ -87,8 +68,8 @@ class RefinementModule(nn.Module):
         self.leakyReLU_1 = nn.LeakyReLU(negative_slope=0.2, inplace=True)
 
         self.conv_2 = nn.Conv2d(
-            self.true_inner_channel_count,
-            self.true_inner_channel_count,
+            self.base_conv_channel_count,
+            self.base_conv_channel_count,
             kernel_size=3,
             stride=1,
             padding=1,
@@ -98,7 +79,7 @@ class RefinementModule(nn.Module):
         if norm_type == "full":
             self.norm_2 = nn.LayerNorm(
                 RefinementModule.change_output_channel_size(
-                    input_height_width, self.true_inner_channel_count
+                    input_height_width, self.base_conv_channel_count
                 ),
             )
         elif norm_type == "half":
@@ -106,10 +87,10 @@ class RefinementModule(nn.Module):
         elif norm_type == "none":
             self.norm_2 = lambda x: x
         elif norm_type == "group":
-            self.norm_2 = nn.GroupNorm(1, self.true_inner_channel_count)
+            self.norm_2 = nn.GroupNorm(1, self.base_conv_channel_count)
         elif norm_type == "instance":
             self.norm_2 = nn.InstanceNorm2d(
-                self.true_inner_channel_count,
+                self.base_conv_channel_count,
                 eps=1e-05,
                 momentum=0.1,
                 affine=False,
@@ -123,7 +104,7 @@ class RefinementModule(nn.Module):
 
         if self.is_final_module:
             self.final_conv = nn.Conv2d(
-                self.true_inner_channel_count,
+                self.base_conv_channel_count,
                 self.final_conv_output_channel_count,
                 kernel_size=1,
                 stride=1,
