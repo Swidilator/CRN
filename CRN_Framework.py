@@ -327,6 +327,10 @@ class CRNFramework(MastersModel):
         ):
             this_batch_size: int = input_dict["img"].shape[0]
 
+            log_this_batch: bool = (batch_idx % self.log_every_n_steps == 0) or (
+                    batch_idx == (len(self.data_loader_train) - 1)
+            )
+
             if this_batch_size == 0:
                 break
 
@@ -372,9 +376,7 @@ class CRNFramework(MastersModel):
 
             loss_total += loss.item() * self.batch_size
 
-            if batch_idx % self.log_every_n_steps == 0 or batch_idx == (
-                len(self.data_loader_train) - 1
-            ):
+            if log_this_batch:
                 batch_loss_val: float = loss.item()
 
                 wandb.log(
