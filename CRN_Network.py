@@ -88,7 +88,8 @@ class CRN(torch.nn.Module):
                 prior_conv_channel_count=self.rms_conv_channel_settings[
                     self.num_rms - 2
                 ],
-                final_conv_output_channel_count=self.__NUM_OUTPUT_IMAGE_CHANNELS__,
+                final_conv_output_channel_count=self.__NUM_OUTPUT_IMAGE_CHANNELS__
+                * self.num_output_images,
                 input_height_width=final_image_size,
                 norm_type=self.layer_norm_type,
             )
@@ -105,7 +106,7 @@ class CRN(torch.nn.Module):
         for i in range(1, len(self.rms_list)):
             output = self.rms_list[i](msk, output, feature_encoding)
 
-        a, b, c = torch.chunk(output.permute(1, 0, 2, 3).unsqueeze(0), 3, 1)
+        a, b, c = torch.chunk(output.unsqueeze(2), 3, 1)
         output = torch.cat((a, b, c), 2)
 
         # TanH for squeezing outputs to [-1, 1]

@@ -1,7 +1,7 @@
 import os
 from contextlib import nullcontext
 from itertools import chain
-from typing import Tuple, Any, Union, Optional
+from typing import Tuple, Any, Union, Optional, List
 
 import torch
 import wandb
@@ -188,6 +188,26 @@ class CRNFramework(MastersModel):
             num_workers=self.num_data_workers,
         )
 
+        self.__data_set_video__ = CityScapesDataset(
+            output_image_height_width=self.input_image_height_width,
+            root=self.dataset_path,
+            split="demoVideo",
+            should_flip=False,
+            subset_size=0,
+            noise=False,
+            dataset_features=dataset_features_dict,
+            specific_model="CRN",
+            use_all_classes=True,  # Since it only contains the correct amount of classes in the dataset
+        )
+
+        self.data_loader_video: torch.utils.data.DataLoader = torch.utils.data.DataLoader(
+            self.__data_set_video__,
+            batch_size=self.batch_size,
+            shuffle=False,
+            num_workers=self.num_data_workers,
+            pin_memory=True,
+        )
+
         self.num_classes = self.__data_set_train__.num_output_classes
 
     def __set_model__(self, **kwargs) -> None:
@@ -328,7 +348,7 @@ class CRNFramework(MastersModel):
             this_batch_size: int = input_dict["img"].shape[0]
 
             log_this_batch: bool = (batch_idx % self.log_every_n_steps == 0) or (
-                    batch_idx == (len(self.data_loader_train) - 1)
+                batch_idx == (len(self.data_loader_train) - 1)
             )
 
             if this_batch_size == 0:
@@ -411,70 +431,113 @@ class CRNFramework(MastersModel):
         # return loss_total.item(), None
         pass
 
-    def sample(self, image_number: int, **kwargs: dict) -> dict:
+    def sample(
+        self, image_numbers: Union[int, tuple], video_dataset: bool = False
+    ) -> Union[dict, List[dict]]:
 
         # Set CRN to eval mode
         self.crn.eval()
         if self.use_feature_encodings:
             self.feature_encoder.eval()
 
-        # noise: torch.Tensor = torch.randn(
-        #     1,
-        #     1,
-        #     self.input_tensor_size[0],
-        #     self.input_tensor_size[1],
-        #     device=self.device,
-        # )
         transform: transforms.ToPILImage = transforms.ToPILImage()
 
-        # img, msk, msk_colour, instance, instance_processed, feature_selection
-        input_dict = self.__data_set_val__[image_number]
+        if isinstance(image_numbers, int):
+            image_numbers = (image_numbers,)
 
-        msk = input_dict["msk"].to(self.device).unsqueeze(0)
-        instance_original = input_dict["inst"].to(self.device).unsqueeze(0)
-        original_img = input_dict["img"].to(self.device).unsqueeze(0)
+        batch_size: int = len(image_numbers)
+
+        first_img: bool = True
+        msk_total: Optional[torch.Tensor] = None
+        msk_colour_total: Optional[torch.Tensor] = None
+        instance_original_total: Optional[torch.Tensor] = None
+        original_img_total: Optional[torch.Tensor] = None
+
+        for image_no in image_numbers:
+            if not video_dataset:
+                input_dict = self.__data_set_val__[image_no]
+            else:
+                input_dict = self.__data_set_video__[image_no]
+            # img, msk, msk_colour, instance, instance_processed, feature_selection
+
+            msk = input_dict["msk"].to(self.device).unsqueeze(0)
+            msk_colour = input_dict["msk_colour"].float().unsqueeze(0)
+            instance_original = input_dict["inst"].to(self.device).unsqueeze(0)
+            original_img = input_dict["img"].to(self.device).unsqueeze(0)
+
+            if first_img:
+                msk_total = msk
+                msk_colour_total = msk_colour
+                instance_original_total = instance_original
+                original_img_total = original_img
+
+                first_img = False
+            else:
+                msk_total = torch.cat((msk_total, msk), dim=0)
+                msk_colour_total = torch.cat((msk_colour_total, msk_colour), dim=0)
+                instance_original_total = torch.cat(
+                    (instance_original_total, instance_original), dim=0
+                )
+                original_img_total = torch.cat(
+                    (original_img_total, original_img), dim=0
+                )
 
         feature_encoding: Optional[torch.Tensor]
         if self.use_feature_encodings:
             if self.use_saved_feature_encodings:
-                feature_encoding = self.feature_encoder.sample_using_means(
-                    instance_original
+                feature_encoding_total = self.feature_encoder.sample_using_means(
+                    instance_original_total
                 )
             else:
-                feature_encoding = self.feature_encoder(original_img, instance_original)
+                feature_encoding_total = self.feature_encoder(
+                    original_img_total, instance_original_total
+                )
         else:
-            feature_encoding = None
+            feature_encoding_total = None
 
-        img_out: torch.Tensor = self.crn(msk, feature_encoding)
+        img_out_total: torch.Tensor = self.crn(msk_total, feature_encoding_total)
 
         # Clamp image to within correct bounds
-        img_out = img_out.clamp(0.0, 1.0)
+        img_out_total = img_out_total.clamp(0.0, 1.0)
 
-        # Drop batch dimension
-        img_out = img_out.squeeze(0).cpu()
-
-        split_images = [transform(single_img) for single_img in img_out]
+        # # Drop batch dimension
+        # img_out = img_out.squeeze(0).cpu()
 
         # Bring images to CPU
-        original_img = original_img.squeeze(0).cpu()
-        # msk = msk.squeeze(0).argmax(0, keepdim=True).float().cpu()
-        msk_colour = input_dict["msk_colour"].float().cpu()
-
-        output_img_dict: dict = {
-            "output_img_{i}".format(i=i): img for i, img in enumerate(split_images)
-        }
+        img_out_total = img_out_total.cpu()
+        original_img_total = original_img_total.cpu()
+        msk_colour_total = msk_colour_total.cpu()
         if self.use_feature_encodings:
-            feature_encoding = feature_encoding.squeeze(0).cpu()
-            output_img_dict.update({"feature_selection": transform(feature_encoding)})
+            feature_encoding_total = feature_encoding_total.cpu()
 
-        output_dict: dict = {
-            "image_index": image_number,
-            "original_img": transform(original_img),
-            "msk_colour": transform(msk_colour),
-            "output_img_dict": output_img_dict,
-        }
+        output_dicts: list = []
 
-        return output_dict
+        for batch_no in range(batch_size):
+
+            split_images = [
+                transform(single_img) for single_img in img_out_total[batch_no]
+            ]
+
+            output_img_dict: dict = {
+                "output_img_{i}".format(i=i): img for i, img in enumerate(split_images)
+            }
+            if self.use_feature_encodings:
+                output_img_dict.update(
+                    {"feature_selection": transform(feature_encoding_total[batch_no])}
+                )
+
+            output_dict: dict = {
+                "image_index": image_numbers[batch_no],
+                "original_img": transform(original_img_total[batch_no]),
+                "msk_colour": transform(msk_colour_total[batch_no]),
+                "output_img_dict": output_img_dict,
+            }
+            output_dicts.append(output_dict)
+
+        if len(output_dicts) == 1:
+            return output_dicts[0]
+        else:
+            return output_dicts
 
     @staticmethod
     def __single_channel_normalise__(
