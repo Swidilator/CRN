@@ -94,6 +94,10 @@ class CRNFramework(MastersModel):
         return self.__data_set_val__
 
     @property
+    def data_set_video(self) -> torch.utils.data.Dataset:
+        return self.__data_set_video__
+
+    @property
     def wandb_trainable_model(self) -> tuple:
         models = [self.crn]
         if self.use_feature_encodings:
