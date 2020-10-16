@@ -149,7 +149,7 @@ class CRNFramework(MastersModel):
 
         dataset_features_dict: dict = {
             "instance_map": True,
-            "instance_map_processed": False,
+            "instance_map_processed": self.use_feature_encodings,
             # "feature_extractions": {"use": False, "file_path": None},
         }
 
@@ -360,9 +360,10 @@ class CRNFramework(MastersModel):
 
             self.crn.zero_grad()
 
-            img = input_dict["img"].to(self.device)
-            msk = input_dict["msk"].to(self.device)
-            instance = input_dict["inst"].to(self.device)
+            img: torch.Tensor = input_dict["img"].to(self.device)
+            msk: torch.Tensor = input_dict["msk"].to(self.device)
+            instance: torch.Tensor = input_dict["inst"].to(self.device)
+            edge_map: torch.Tensor = input_dict["edge_map"].to(self.device)
 
             with self.torch_amp_autocast():
                 feature_encoding: Optional[torch.Tensor]
@@ -378,7 +379,7 @@ class CRNFramework(MastersModel):
                 else:
                     feature_encoding = None
 
-                out: torch.Tensor = self.crn(msk, feature_encoding)
+                out: torch.Tensor = self.crn(msk, feature_encoding, edge_map)
 
                 for b in range(img.shape[0]):
                     img[b] = self.normalise(img[b])
@@ -456,6 +457,7 @@ class CRNFramework(MastersModel):
             msk_total: Optional[torch.Tensor] = None
             msk_colour_total: Optional[torch.Tensor] = None
             instance_original_total: Optional[torch.Tensor] = None
+            edge_map_total: Optional[torch.Tensor] = None
             original_img_total: Optional[torch.Tensor] = None
 
             for image_no in image_numbers:
@@ -468,12 +470,14 @@ class CRNFramework(MastersModel):
                 msk = input_dict["msk"].to(self.device).unsqueeze(0)
                 msk_colour = input_dict["msk_colour"].float().unsqueeze(0)
                 instance_original = input_dict["inst"].to(self.device).unsqueeze(0)
+                edge_map = input_dict["edge_map"].to(self.device).unsqueeze(0)
                 original_img = input_dict["img"].to(self.device).unsqueeze(0)
 
                 if first_img:
                     msk_total = msk
                     msk_colour_total = msk_colour
                     instance_original_total = instance_original
+                    edge_map_total = edge_map
                     original_img_total = original_img
 
                     first_img = False
@@ -482,6 +486,9 @@ class CRNFramework(MastersModel):
                     msk_colour_total = torch.cat((msk_colour_total, msk_colour), dim=0)
                     instance_original_total = torch.cat(
                         (instance_original_total, instance_original), dim=0
+                    )
+                    edge_map_total = torch.cat(
+                        (edge_map_total, edge_map), dim=0
                     )
                     original_img_total = torch.cat(
                         (original_img_total, original_img), dim=0
@@ -500,7 +507,7 @@ class CRNFramework(MastersModel):
             else:
                 feature_encoding_total = None
 
-            img_out_total: torch.Tensor = self.crn(msk_total, feature_encoding_total)
+            img_out_total: torch.Tensor = self.crn(msk_total, feature_encoding_total, edge_map_total)
 
             # Clamp image to within correct bounds
             img_out_total = img_out_total.clamp(0.0, 1.0)

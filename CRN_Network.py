@@ -54,6 +54,7 @@ class CRN(torch.nn.Module):
                 RefinementModule(
                     semantic_input_channel_count=self.num_classes,
                     feature_encoder_input_channel_count=(self.use_feature_encoder * 3),
+                    edge_map_input_channel_count=(self.use_feature_encoder * 1),
                     base_conv_channel_count=self.rms_conv_channel_settings[0],
                     prior_conv_channel_count=0,
                     final_conv_output_channel_count=0,
@@ -68,6 +69,7 @@ class CRN(torch.nn.Module):
                 RefinementModule(
                     semantic_input_channel_count=self.num_classes,
                     feature_encoder_input_channel_count=(self.use_feature_encoder * 3),
+                    edge_map_input_channel_count=(self.use_feature_encoder * 1),
                     base_conv_channel_count=self.rms_conv_channel_settings[i],
                     prior_conv_channel_count=self.rms_conv_channel_settings[i - 1],
                     final_conv_output_channel_count=0,
@@ -82,6 +84,7 @@ class CRN(torch.nn.Module):
             RefinementModule(
                 semantic_input_channel_count=self.num_classes,
                 feature_encoder_input_channel_count=(self.use_feature_encoder * 3),
+                edge_map_input_channel_count=(self.use_feature_encoder * 1),
                 base_conv_channel_count=self.rms_conv_channel_settings[
                     self.num_rms - 1
                 ],
@@ -99,12 +102,12 @@ class CRN(torch.nn.Module):
             self.tan_h = nn.Tanh()
 
     def forward(
-        self, msk: torch.Tensor, feature_encoding: torch.Tensor,
+        self, msk: torch.Tensor, feature_encoding: torch.Tensor, edge_map: torch.Tensor
     ) -> torch.Tensor:
 
-        output: torch.Tensor = self.rms_list[0](msk, None, feature_encoding)
+        output: torch.Tensor = self.rms_list[0](msk, None, feature_encoding, edge_map)
         for i in range(1, len(self.rms_list)):
-            output = self.rms_list[i](msk, output, feature_encoding)
+            output = self.rms_list[i](msk, output, feature_encoding, edge_map)
 
         a, b, c = torch.chunk(output.unsqueeze(2), 3, 1)
         output = torch.cat((a, b, c), 2)

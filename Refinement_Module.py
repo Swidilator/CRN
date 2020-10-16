@@ -7,6 +7,7 @@ class RefinementModule(nn.Module):
         self,
         semantic_input_channel_count: int,
         feature_encoder_input_channel_count: int,
+        edge_map_input_channel_count: int,
         base_conv_channel_count: int,
         prior_conv_channel_count: int,
         final_conv_output_channel_count: int,
@@ -21,6 +22,7 @@ class RefinementModule(nn.Module):
         self.total_input_channel_count: int = (
             semantic_input_channel_count
             + feature_encoder_input_channel_count
+            + edge_map_input_channel_count
             + prior_conv_channel_count
         )
 
@@ -132,6 +134,7 @@ class RefinementModule(nn.Module):
         mask: torch.Tensor,
         prior_layers: torch.Tensor,
         feature_selection: torch.Tensor,
+        edge_map: torch.Tensor
     ):
 
         # Downsample mask for current RM
@@ -154,7 +157,10 @@ class RefinementModule(nn.Module):
             feature_selection = torch.nn.functional.interpolate(
                 input=feature_selection, size=self.input_height_width, mode="nearest"
             )
-            x = torch.cat((x, feature_selection), dim=1)
+            edge_map = torch.nn.functional.interpolate(
+                input=edge_map, size=self.input_height_width, mode="nearest"
+            )
+            x = torch.cat((x, feature_selection, edge_map), dim=1)
 
         x = self.conv_1(x)
         x = self.norm_1(x)
