@@ -1,4 +1,5 @@
 import os
+import sys
 from contextlib import nullcontext
 from itertools import chain
 from typing import Tuple, Any, Union, Optional, List
@@ -299,8 +300,6 @@ class CRNFramework(MastersModel):
 
         save_dict: dict = {
             "dict_crn": self.crn.state_dict(),
-            "loss_layer_scales": self.loss_net.loss_layer_scales,
-            "loss_history": self.loss_net.loss_layer_history,
         }
         if self.use_feature_encodings:
             save_dict.update(
@@ -332,9 +331,6 @@ class CRNFramework(MastersModel):
         self.crn.load_state_dict(checkpoint["dict_crn"], strict=False)
         if self.use_feature_encodings:
             self.feature_encoder.load_state_dict(checkpoint["dict_encoder_decoder"])
-        if not self.sample_only:
-            self.loss_net.loss_layer_scales = checkpoint["loss_layer_scales"]
-            self.loss_net.loss_layer_history = checkpoint["loss_history"]
 
     def train(self, **kwargs) -> Tuple[float, Any]:
         self.crn.train()

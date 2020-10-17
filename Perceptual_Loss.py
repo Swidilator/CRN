@@ -4,34 +4,38 @@ import torchvision
 
 import wandb
 
-
-class CircularList:
-    def __init__(self, list_len: int):
-        self.len = list_len
-        self.data: list = [1.0] * list_len
-        self.pointer: int = 0
-
-    def update(self, input_value: float) -> None:
-        self.data[self.pointer] = input_value
-        if self.pointer + 1 == self.len:
-            self.pointer = 0
+class FeatureNet(modules.Module):
+    def __init__(self, model: str):
+        super(FeatureNet, self).__init__()
+        if model == "VGG":
+            feature_network: torch.nn.Sequential = torchvision.models.vgg19(
+                pretrained=True, progress=True
+            ).features
+            loss_layer_numbers: tuple = (4, 9, 14, 23, 32)
+        elif model == "MobileNet":
+            feature_network: torch.nn.Sequential = torchvision.models.mobilenet_v2(
+                pretrained=True, progress=True
+            ).features
+            loss_layer_numbers: tuple = (4, 6, 8, 13, 17)
         else:
-            self.pointer += 1
+            raise ValueError
+        # fmt: off
+        self.seq_1 = feature_network[0:loss_layer_numbers[0]].eval()
+        self.seq_2 = feature_network[loss_layer_numbers[0]:loss_layer_numbers[1]].eval()
+        self.seq_3 = feature_network[loss_layer_numbers[1]:loss_layer_numbers[2]].eval()
+        self.seq_4 = feature_network[loss_layer_numbers[2]:loss_layer_numbers[3]].eval()
+        self.seq_5 = feature_network[loss_layer_numbers[3]:loss_layer_numbers[4]].eval()
+        # fmt: on
+        for param in self.parameters():
+            param.requires_grad = False
 
-    def sum(self) -> float:
-        return sum(self.data)
-
-    def mean(self) -> float:
-        return sum(self.data) / self.len
-
-
-def get_layer_values(
-    self: torch.nn.modules.conv.Conv2d, input_data: tuple, output_data: torch.Tensor
-) -> None:
-    # input is a tuple of packed inputs
-    # output is a Tensor. output.data is the Tensor we are interested in
-    self.stored_output = output_data
-    pass
+    def forward(self, image: torch.Tensor):
+        out1 = self.seq_1(image)
+        out2 = self.seq_2(out1)
+        out3 = self.seq_3(out2)
+        out4 = self.seq_4(out3)
+        out5 = self.seq_5(out4)
+        return out1, out2, out3, out4, out5
 
 
 class PerceptualLossNetwork(modules.Module):
@@ -50,57 +54,10 @@ class PerceptualLossNetwork(modules.Module):
 
         self.output_feature_layers: list = []
 
-        if self.base_model == "VGG":
-            vgg = torchvision.models.vgg19(pretrained=True, progress=True)
-            self.feature_network = vgg.features[0:32]
-            # del vgg
-        elif self.base_model == "MobileNet":
-            mobile_net = torchvision.models.mobilenet_v2(pretrained=True, progress=True)
-            self.feature_network = mobile_net.features[0:17]
-            # del mobile_net
-
-        for param in self.feature_network.parameters():
-            param.requires_grad = False
-        self.feature_network.eval()
-        torch.cuda.empty_cache()
-
-        self.norm = torch.nn.modules.normalization
-
-        # loss_layer_numbers: tuple = (2, 7, 12, 21, 30)
-        if self.base_model == "VGG":
-            loss_layer_numbers: tuple = (3, 8, 13, 22, 31)
-            for i in loss_layer_numbers:
-                self.output_feature_layers.append(self.feature_network[i])
-        elif self.base_model == "MobileNet":
-            # Todo Check these are indeed targeting relu layers
-            loss_layer_numbers: tuple = (3, 5, 7, 12, 16)
-            for i in loss_layer_numbers:
-                self.output_feature_layers.append(self.feature_network[i].conv[2])
-
-        self.loss_layer_history: list = []
+        self.feature_network = FeatureNet(self.base_model)
 
         # Values taken from official source code, no idea how they got them
         self.loss_layer_scales = [1.6, 2.3, 1.8, 2.8, 0.08, 1.0]
-
-        # History
-        for i in range(len(self.loss_layer_scales)):
-            self.loss_layer_history.append(CircularList(history_len))
-
-        # Loss layer coefficient base calculations
-        for layer in self.output_feature_layers:
-            layer.register_forward_hook(get_layer_values)
-
-    def update_lambdas(self) -> None:
-        avg_list: list = [
-            self.loss_layer_history[i].mean()
-            for i in range(len(self.loss_layer_history))
-        ]
-        avg_total: float = sum(avg_list) / len(avg_list)
-
-        for i, val in enumerate(avg_list):
-            scale_factor: float = val / avg_total
-            self.loss_layer_scales[i] = 1.0 / scale_factor
-        wandb.log({"Loss scales": self.loss_layer_scales})
 
     @staticmethod
     def __calculate_loss(
@@ -154,15 +111,13 @@ class PerceptualLossNetwork(modules.Module):
             calculate_loss = self.__calculate_loss
         else:
             loss: torch.Tensor = torch.zeros(
-                this_batch_size,
-                1,
-                device=self.device,
+                this_batch_size, 1, device=self.device,
             )
             calculate_loss = self.__calculate_single_image_loss
 
         for b in range(this_batch_size):
-            result_truth: list = self.__get_outputs(input_truth[b])
-            result_gen: list = self.__get_outputs(input_gen[b])
+            result_truth: tuple = self.feature_network(input_truth[b])
+            result_gen: tuple = self.feature_network(input_gen[b])
 
             if self.use_loss_output_image:
                 input_loss: torch.Tensor = calculate_loss(
@@ -172,26 +127,25 @@ class PerceptualLossNetwork(modules.Module):
                 loss[b] += input_loss / self.loss_layer_scales[-1]
 
             # VGG feature layer output comparisons
-            for i in range(len(self.output_feature_layers)):
+            for i in range(len(result_gen)):
                 label_shape: tuple = tuple(result_truth[i][b].shape[1:])
                 label_interpolate = torch.nn.functional.interpolate(
                     input=input_label[b], size=label_shape, mode="nearest"
                 )
 
                 layer_loss: torch.Tensor = calculate_loss(
-                    result_gen[i], result_truth[i], label_interpolate,
+                    result_gen[i], result_truth[i].detach(), label_interpolate,
                 )
 
                 loss[b] += layer_loss / self.loss_layer_scales[i]
 
         if input_gen.shape[1] > 1:
             min_loss, _ = torch.min(loss, dim=1)
-            # print(min_loss.detach().cpu().numpy())
 
-            a = min_loss.sum(dim=1, keepdim=True) * 0.999
-            b = loss.mean(dim=1).sum(dim=1, keepdim=True) * 0.001
+            min_component = min_loss.sum(dim=1, keepdim=True) * 0.999
+            mean_component = loss.mean(dim=1).sum(dim=1, keepdim=True) * 0.001
 
-            total_loss: torch.Tensor = a + b
+            total_loss: torch.Tensor = min_component + mean_component
 
             return torch.mean(total_loss, dim=0)
         else:
