@@ -12,8 +12,8 @@ from tqdm import tqdm
 
 from CRN.CRN_Network import CRN
 from CRN.Perceptual_Loss import PerceptualLossNetwork
-from support_scripts.components import CityScapesDataset, FeatureEncoder
-from support_scripts.utils import MastersModel, ModelSettingsManager
+from support_scripts.components import FeatureEncoder
+from support_scripts.utils import MastersModel, ModelSettingsManager, CityScapesDataset
 
 ImageFile.LOAD_TRUNCATED_IMAGES = True
 
