@@ -356,7 +356,7 @@ class CRNFramework(MastersModel):
 
             self.crn.zero_grad()
 
-            img: torch.Tensor = input_dict["img"].to(self.device)
+            real_img: torch.Tensor = input_dict["img"].to(self.device)
             msk: torch.Tensor = input_dict["msk"].to(self.device)
             instance: torch.Tensor = input_dict["inst"].to(self.device)
             edge_map: torch.Tensor = input_dict["edge_map"].to(self.device)
@@ -365,7 +365,7 @@ class CRNFramework(MastersModel):
                 feature_encoding: Optional[torch.Tensor]
                 if self.use_feature_encodings:
                     feature_encoding: torch.Tensor = self.feature_encoder(
-                        img,
+                        real_img,
                         instance,
                         input_dict["img_id"]
                         if self.use_saved_feature_encodings
@@ -375,16 +375,16 @@ class CRNFramework(MastersModel):
                 else:
                     feature_encoding = None
 
-                out: torch.Tensor = self.crn(msk, feature_encoding, edge_map)
+                fake_img: torch.Tensor = self.crn(msk, feature_encoding, edge_map)
 
-                for b in range(img.shape[0]):
-                    img[b] = self.normalise(img[b])
+                for b in range(real_img.shape[0]):
+                    real_img[b] = self.normalise(real_img[b])
 
-                for b in range(out.shape[0]):
-                    for out_img in range(out.shape[1]):
-                        out[b, out_img] = self.normalise(out[b, out_img])
+                for b in range(fake_img.shape[0]):
+                    for out_img in range(fake_img.shape[1]):
+                        fake_img[b, out_img] = self.normalise(fake_img[b, out_img])
 
-                loss: torch.Tensor = self.loss_net(out, img, msk)
+                loss: torch.Tensor = self.loss_net(fake_img, real_img, msk)
             # with amp.scale_loss(loss, self.optimizer) as scaled_loss:
             #     scaled_loss.backward()
             if self.use_amp == "torch":

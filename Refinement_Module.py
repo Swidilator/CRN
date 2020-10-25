@@ -1,57 +1,6 @@
 import torch
 import torch.nn as nn
-
-
-class RMBlock(nn.Module):
-    def __init__(
-        self,
-        input_height_width: tuple,
-        input_channel_count: int,
-        output_channel_count: int,
-        norm_type: str,
-    ):
-        super().__init__()
-        # Module architecture
-        self.conv_1 = nn.Conv2d(
-            input_channel_count,
-            output_channel_count,
-            kernel_size=3,
-            stride=1,
-            padding=1,
-        )
-        RefinementModule.init_conv_weights(self.conv_1)
-
-        if norm_type == "full":
-            self.norm_1 = nn.LayerNorm(
-                RefinementModule.change_output_channel_size(
-                    input_height_width, output_channel_count
-                ),
-            )
-        elif norm_type == "half":
-            self.norm_1 = nn.LayerNorm(torch.Size(input_height_width))
-        elif norm_type == "none":
-            self.norm_1 = lambda x: x
-        elif norm_type == "group":
-            self.norm_1 = nn.GroupNorm(1, output_channel_count)
-        elif norm_type == "instance":
-            self.norm_1 = nn.InstanceNorm2d(
-                output_channel_count,
-                eps=1e-05,
-                momentum=0.1,
-                affine=False,
-                track_running_stats=False,
-            )
-        elif norm_type == "weight":
-            self.norm_1 = lambda x: x
-            self.conv_1 = nn.utils.weight_norm(self.conv_1)
-
-        self.leakyReLU_1 = nn.LeakyReLU(negative_slope=0.2, inplace=True)
-
-    def forward(self, x: torch.Tensor):
-        x = self.conv_1(x)
-        x = self.norm_1(x)
-        x = self.leakyReLU_1(x)
-        return x
+from support_scripts.components import RMBlock
 
 
 class RefinementModule(nn.Module):
@@ -85,17 +34,21 @@ class RefinementModule(nn.Module):
         self.is_final_module: bool = self.final_conv_output_channel_count > 0
 
         self.rm_block_1 = RMBlock(
-            self.input_height_width,
-            self.total_input_channel_count,
             self.base_conv_channel_count,
-            norm_type
+            self.total_input_channel_count,
+            self.input_height_width,
+            kernel_size=3,
+            norm_type=norm_type,
+            num_conv_groups=1,
         )
 
         self.rm_block_2 = RMBlock(
+            self.base_conv_channel_count,
+            self.base_conv_channel_count,
             self.input_height_width,
-            self.base_conv_channel_count,
-            self.base_conv_channel_count,
-            norm_type
+            kernel_size=3,
+            norm_type=norm_type,
+            num_conv_groups=1,
         )
 
         if self.is_final_module:
@@ -118,10 +71,7 @@ class RefinementModule(nn.Module):
     def change_output_channel_size(
         input_height_width: tuple, output_channel_number: int
     ):
-        size_list = list(input_height_width)
-        size_list.insert(0, output_channel_number)
-        # print(size_list)
-        return torch.Size(size_list)
+        return torch.Size([output_channel_number, *input_height_width])
 
     def forward(
         self,
@@ -156,8 +106,8 @@ class RefinementModule(nn.Module):
             )
             x = torch.cat((x, feature_selection, edge_map), dim=1)
 
-        x = self.rm_block_1(x)
-        x = self.rm_block_2(x)
+        x = self.rm_block_1(x, relu_loc="after")
+        x = self.rm_block_2(x, relu_loc="after")
 
         if self.is_final_module:
             x = self.final_conv(x)
