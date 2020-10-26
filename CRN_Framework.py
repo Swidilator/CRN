@@ -120,7 +120,7 @@ class CRNFramework(MastersModel):
             "perceptual_base_model": manager.model_conf["CRN_PERCEPTUAL_BASE_MODEL"],
             "use_feature_encodings": manager.model_conf["CRN_USE_FEATURE_ENCODINGS"],
             "use_loss_output_image": manager.model_conf["CRN_USE_LOSS_OUTPUT_IMAGE"],
-            "use_loss_scaling_method": manager.model_conf["CRN_LOSS_SCALING_METHOD"],
+            "loss_scaling_method": manager.model_conf["CRN_LOSS_SCALING_METHOD"],
             "layer_norm_type": manager.model_conf["CRN_LAYER_NORM_TYPE"],
             "use_saved_feature_encodings": manager.model_conf["CRN_USE_SAVED_FEATURE_ENCODINGS"],
         }
