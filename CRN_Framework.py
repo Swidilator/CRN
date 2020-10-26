@@ -109,24 +109,6 @@ class CRNFramework(MastersModel):
     def from_model_settings_manager(
         cls, manager: ModelSettingsManager
     ) -> "CRNFramework":
-
-        # model_frame_args: dict = {
-        #     "device": manager.device,
-        #     "data_path": manager.args["dataset_path"],
-        #     "input_image_height_width": manager.args["input_image_height_width"],
-        #     "batch_size": manager.args["batch_size"],
-        #     "use_all_classes": manager.args["use_all_classes"],
-        #     "num_loader_workers": manager.args["num_workers"],
-        #     "subset_size": manager.args["training_subset"],
-        #     "should_flip_train": manager.args["flip_training_images"],
-        #     "use_tanh": not manager.args["no_tanh"],
-        #     "use_input_noise": manager.args["input_image_noise"],
-        #     "sample_only": manager.args["sample_only"],
-        #     "use_amp": manager.args["use_amp"],
-        #     "log_every_n_steps": manager.args["log_every_n_steps"],
-        #     "model_save_dir": manager.args["model_save_dir"],
-        # }
-        #
         # fmt: off
         settings = {
             "input_tensor_size": (
