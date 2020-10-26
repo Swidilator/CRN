@@ -61,11 +61,10 @@ class CRNFramework(MastersModel):
             assert "input_tensor_size" in kwargs
             assert "num_output_images" in kwargs
             assert "num_inner_channels" in kwargs
-            assert "history_len" in kwargs
             assert "perceptual_base_model" in kwargs
             assert "use_feature_encodings" in kwargs
             assert "use_loss_output_image" in kwargs
-            assert "use_numel_loss_scaling" in kwargs
+            assert "loss_scaling_method" in kwargs
             assert "layer_norm_type" in kwargs
         except AssertionError as e:
             print("Missing argument: {error}".format(error=e))
@@ -75,11 +74,10 @@ class CRNFramework(MastersModel):
         self.input_tensor_size: tuple = kwargs["input_tensor_size"]
         self.num_output_images: int = kwargs["num_output_images"]
         self.num_inner_channels: int = kwargs["num_inner_channels"]
-        self.history_len: int = kwargs["history_len"]
         self.perceptual_base_model: str = kwargs["perceptual_base_model"]
         self.use_feature_encodings: bool = kwargs["use_feature_encodings"]
         self.use_loss_output_image: bool = kwargs["use_loss_output_image"]
-        self.use_numel_loss_scaling: bool = kwargs["use_numel_loss_scaling"]
+        self.loss_scaling_method: str = kwargs["loss_scaling_method"]
         self.layer_norm_type: str = kwargs["layer_norm_type"]
         self.use_saved_feature_encodings: bool = kwargs["use_saved_feature_encodings"]
         # fmt: on
@@ -137,11 +135,10 @@ class CRNFramework(MastersModel):
             ),
             "num_output_images": manager.model_conf["CRN_NUM_OUTPUT_IMAGES"],
             "num_inner_channels": manager.model_conf["CRN_NUM_INNER_CHANNELS"],
-            "history_len": manager.model_conf["CRN_HISTORY_LEN"],
             "perceptual_base_model": manager.model_conf["CRN_PERCEPTUAL_BASE_MODEL"],
             "use_feature_encodings": manager.model_conf["CRN_USE_FEATURE_ENCODINGS"],
             "use_loss_output_image": manager.model_conf["CRN_USE_LOSS_OUTPUT_IMAGE"],
-            "use_numel_loss_scaling": manager.model_conf["CRN_USE_NUMEL_LOSS_SCALING"],
+            "use_loss_scaling_method": manager.model_conf["CRN_LOSS_SCALING_METHOD"],
             "layer_norm_type": manager.model_conf["CRN_LAYER_NORM_TYPE"],
             "use_saved_feature_encodings": manager.model_conf["CRN_USE_SAVED_FEATURE_ENCODINGS"],
         }
@@ -256,11 +253,10 @@ class CRNFramework(MastersModel):
         if not self.sample_only:
 
             self.loss_net: PerceptualLossNetwork = PerceptualLossNetwork(
-                self.history_len,
                 self.perceptual_base_model,
                 self.device,
                 self.use_loss_output_image,
-                self.use_numel_loss_scaling
+                self.loss_scaling_method
             )
 
             # self.loss_net = nn.DataParallel(self.loss_net, device_ids=device_ids)

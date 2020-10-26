@@ -40,25 +40,33 @@ class FeatureNet(modules.Module):
 class PerceptualLossNetwork(modules.Module):
     def __init__(
         self,
-        history_len: int,
         base_model: str,
         device: torch.device,
         use_loss_output_image: bool,
-        use_numel_loss_scaling: bool,
+        loss_scaling_method: str,
     ):
         super(PerceptualLossNetwork, self).__init__()
 
         self.device: torch.device = device
         self.base_model: str = base_model
         self.use_loss_output_image: bool = use_loss_output_image
-        self.use_numel_loss_scaling: bool = use_numel_loss_scaling
+        self.loss_scaling_method: str = loss_scaling_method
 
         self.output_feature_layers: list = []
 
         self.feature_network: FeatureNet = FeatureNet(self.base_model)
 
-        # Values taken from official source code, no idea how they got them
-        self.loss_layer_scales: list = [1.6, 2.3, 1.8, 2.8, 0.08, 1.0]
+        if self.loss_scaling_method == "official":
+            # Values taken from official source code, no idea how they got them
+            self.loss_layer_scales: list = [1.6, 2.3, 1.8, 2.8, 0.08, 1.0]
+        elif self.loss_scaling_method == "altered":
+            # Similar to VGGLoss values in pix2pixHD
+            self.loss_layer_scales: list = [1.28, 0.64, 0.32, 0.16, 0.08, 1.0]
+        elif self.loss_scaling_method == "flat":
+            self.loss_layer_scales: list = [1.0, 1.0, 1.0, 1.0, 1.0, 1.0]
+        else:
+            raise ValueError("Invalid value of loss_scaling_method.")
+
 
     @staticmethod
     def __calculate_loss(
@@ -124,10 +132,7 @@ class PerceptualLossNetwork(modules.Module):
                 input_loss: torch.Tensor = calculate_loss(
                     input_gen[b], input_truth[b], input_label[b]
                 )
-                if self.use_numel_loss_scaling:
-                    loss[b] += input_loss / input_gen[b].numel()
-                else:
-                    loss[b] += input_loss / self.loss_layer_scales[-1]
+                loss[b] += input_loss / self.loss_layer_scales[-1]
 
             # VGG feature layer output comparisons
             for i in range(len(result_gen)):
@@ -140,10 +145,7 @@ class PerceptualLossNetwork(modules.Module):
                     result_gen[i], result_truth[i].detach(), label_interpolate,
                 )
 
-                if self.use_numel_loss_scaling:
-                    loss[b] += layer_loss / result_gen[i].numel()
-                else:
-                    loss[b] += layer_loss / self.loss_layer_scales[i]
+                loss[b] += layer_loss / self.loss_layer_scales[i]
 
         if input_gen.shape[1] > 1:
             min_loss, _ = torch.min(loss, dim=1)
