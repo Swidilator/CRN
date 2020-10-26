@@ -2,7 +2,6 @@ import torch
 import torch.nn.modules as modules
 import torchvision
 
-import wandb
 
 class FeatureNet(modules.Module):
     def __init__(self, model: str):
@@ -45,19 +44,21 @@ class PerceptualLossNetwork(modules.Module):
         base_model: str,
         device: torch.device,
         use_loss_output_image: bool,
+        use_numel_loss_scaling: bool,
     ):
         super(PerceptualLossNetwork, self).__init__()
 
         self.device: torch.device = device
-        self.base_model = base_model
-        self.use_loss_output_image = use_loss_output_image
+        self.base_model: str = base_model
+        self.use_loss_output_image: bool = use_loss_output_image
+        self.use_numel_loss_scaling: bool = use_numel_loss_scaling
 
         self.output_feature_layers: list = []
 
-        self.feature_network = FeatureNet(self.base_model)
+        self.feature_network: FeatureNet = FeatureNet(self.base_model)
 
         # Values taken from official source code, no idea how they got them
-        self.loss_layer_scales = [1.6, 2.3, 1.8, 2.8, 0.08, 1.0]
+        self.loss_layer_scales: list = [1.6, 2.3, 1.8, 2.8, 0.08, 1.0]
 
     @staticmethod
     def __calculate_loss(
@@ -123,8 +124,10 @@ class PerceptualLossNetwork(modules.Module):
                 input_loss: torch.Tensor = calculate_loss(
                     input_gen[b], input_truth[b], input_label[b]
                 )
-
-                loss[b] += input_loss / self.loss_layer_scales[-1]
+                if self.use_numel_loss_scaling:
+                    loss[b] += input_loss / input_gen[b].numel()
+                else:
+                    loss[b] += input_loss / self.loss_layer_scales[-1]
 
             # VGG feature layer output comparisons
             for i in range(len(result_gen)):
@@ -137,7 +140,10 @@ class PerceptualLossNetwork(modules.Module):
                     result_gen[i], result_truth[i].detach(), label_interpolate,
                 )
 
-                loss[b] += layer_loss / self.loss_layer_scales[i]
+                if self.use_numel_loss_scaling:
+                    loss[b] += layer_loss / result_gen[i].numel()
+                else:
+                    loss[b] += layer_loss / self.loss_layer_scales[i]
 
         if input_gen.shape[1] > 1:
             min_loss, _ = torch.min(loss, dim=1)
