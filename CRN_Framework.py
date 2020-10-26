@@ -483,9 +483,7 @@ class CRNFramework(MastersModel):
                     instance_original_total = torch.cat(
                         (instance_original_total, instance_original), dim=0
                     )
-                    edge_map_total = torch.cat(
-                        (edge_map_total, edge_map), dim=0
-                    )
+                    edge_map_total = torch.cat((edge_map_total, edge_map), dim=0)
                     original_img_total = torch.cat(
                         (original_img_total, original_img), dim=0
                     )
@@ -503,7 +501,9 @@ class CRNFramework(MastersModel):
             else:
                 feature_encoding_total = None
 
-            img_out_total: torch.Tensor = self.crn(msk_total, feature_encoding_total, edge_map_total)
+            img_out_total: torch.Tensor = self.crn(
+                msk_total, feature_encoding_total, edge_map_total
+            )
 
             # Clamp image to within correct bounds
             img_out_total = img_out_total.clamp(0.0, 1.0)
@@ -527,11 +527,16 @@ class CRNFramework(MastersModel):
                 ]
 
                 output_img_dict: dict = {
-                    "output_img_{i}".format(i=i): img for i, img in enumerate(split_images)
+                    "output_img_{i}".format(i=i): img
+                    for i, img in enumerate(split_images)
                 }
                 if self.use_feature_encodings:
                     output_img_dict.update(
-                        {"feature_selection": transform(feature_encoding_total[batch_no])}
+                        {
+                            "feature_selection": transform(
+                                feature_encoding_total[batch_no]
+                            )
+                        }
                     )
 
                 output_dict: dict = {
