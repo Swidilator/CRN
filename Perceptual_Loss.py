@@ -62,6 +62,9 @@ class PerceptualLossNetwork(modules.Module):
         elif self.loss_scaling_method == "altered":
             # Similar to VGGLoss values in pix2pixHD
             self.loss_layer_scales: list = [1.28, 0.64, 0.32, 0.16, 0.08, 1.0]
+        elif self.loss_scaling_method == "may10":
+            # Loss used in the one run that looked like something...
+            self.loss_layer_scales: list = [1.0, 1.6, 2.3, 1.8, 2.8, 1.0]
         elif self.loss_scaling_method == "flat":
             self.loss_layer_scales: list = [1.0, 1.0, 1.0, 1.0, 1.0, 1.0]
         else:
