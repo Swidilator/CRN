@@ -70,32 +70,15 @@ class PerceptualLossNetwork(modules.Module):
         else:
             raise ValueError("Invalid value of loss_scaling_method.")
 
-
     @staticmethod
     def __calculate_loss(
         gen: torch.Tensor, truth: torch.Tensor, label_images: torch.Tensor
     ) -> torch.Tensor:
         loss = torch.mean(
-            label_images * torch.mean(torch.abs(truth - gen), dim=1).unsqueeze(1),
+            label_images * torch.mean(torch.abs(truth - gen), dim=1, keepdim=True),
             dim=(2, 3),
         )
         return loss
-
-    @staticmethod
-    def __calculate_single_image_loss(
-        gen: torch.Tensor, truth: torch.Tensor, label_images: torch.Tensor
-    ) -> torch.Tensor:
-        loss = torch.mean(torch.abs(truth - gen))
-        return loss
-
-    def __get_outputs(self, inputs: torch.Tensor):
-        self.feature_network(inputs)
-        outputs: list = []
-        for layer in self.output_feature_layers:
-            outputs.append(layer.stored_output.clone())
-            # del layer.stored_output
-
-        return outputs
 
     def forward(
         self,
@@ -111,28 +94,19 @@ class PerceptualLossNetwork(modules.Module):
         input_truth = input_truth.unsqueeze(1)
         input_label = input_label.unsqueeze(1)
 
-        # Use diversity loss if more than one output image is used
-        if input_gen.shape[1] > 1:
-            loss: torch.Tensor = torch.zeros(
-                this_batch_size,
-                input_gen.shape[1],
-                input_label.shape[2],
-                device=self.device,
-            )
-
-            calculate_loss = self.__calculate_loss
-        else:
-            loss: torch.Tensor = torch.zeros(
-                this_batch_size, 1, device=self.device,
-            )
-            calculate_loss = self.__calculate_single_image_loss
+        loss: torch.Tensor = torch.zeros(
+            this_batch_size,
+            input_gen.shape[1],
+            input_label.shape[2],
+            device=self.device,
+        )
 
         for b in range(this_batch_size):
             result_truth: tuple = self.feature_network(input_truth[b])
             result_gen: tuple = self.feature_network(input_gen[b])
 
             if self.use_loss_output_image:
-                input_loss: torch.Tensor = calculate_loss(
+                input_loss: torch.Tensor = self.__calculate_loss(
                     input_gen[b], input_truth[b], input_label[b]
                 )
                 loss[b] += input_loss / self.loss_layer_scales[-1]
@@ -144,20 +118,17 @@ class PerceptualLossNetwork(modules.Module):
                     input=input_label[b], size=label_shape, mode="nearest"
                 )
 
-                layer_loss: torch.Tensor = calculate_loss(
+                layer_loss: torch.Tensor = self.__calculate_loss(
                     result_gen[i], result_truth[i].detach(), label_interpolate,
                 )
 
                 loss[b] += layer_loss / self.loss_layer_scales[i]
 
-        if input_gen.shape[1] > 1:
-            min_loss, _ = torch.min(loss, dim=1)
+        min_loss, _ = torch.min(loss, dim=1)
 
-            min_component = min_loss.sum(dim=1, keepdim=True) * 0.999
-            mean_component = loss.mean(dim=1).sum(dim=1, keepdim=True) * 0.001
+        min_component = min_loss.sum(dim=1, keepdim=True) * 0.999
+        mean_component = loss.mean(dim=1).sum(dim=1, keepdim=True) * 0.001
 
-            total_loss: torch.Tensor = min_component + mean_component
+        total_loss: torch.Tensor = min_component + mean_component
 
-            return torch.mean(total_loss, dim=0)
-        else:
-            return torch.mean(loss, dim=0)
+        return torch.mean(total_loss)
