@@ -36,6 +36,7 @@ class CRNFramework(MastersModel):
         log_every_n_steps: int,
         model_save_dir: str,
         image_save_dir: str,
+        starting_epoch: int,
         **kwargs,
     ):
         super(CRNFramework, self).__init__(
@@ -54,6 +55,7 @@ class CRNFramework(MastersModel):
             log_every_n_steps,
             model_save_dir,
             image_save_dir,
+            starting_epoch,
         )
         self.model_name: str = "CRN"
 
