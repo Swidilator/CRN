@@ -56,6 +56,7 @@ class CRNFramework(MastersModel):
             model_save_dir,
             image_save_dir,
             starting_epoch,
+            **kwargs
         )
         self.model_name: str = "CRN"
 
@@ -284,6 +285,8 @@ class CRNFramework(MastersModel):
 
         save_dict: dict = {
             "dict_crn": self.crn.state_dict(),
+            "args": self.args,
+            "kwargs": self.kwargs
         }
         if self.use_feature_encodings:
             save_dict.update(
@@ -315,6 +318,17 @@ class CRNFramework(MastersModel):
         self.crn.load_state_dict(checkpoint["dict_crn"], strict=False)
         if self.use_feature_encodings:
             self.feature_encoder.load_state_dict(checkpoint["dict_encoder_decoder"])
+
+    @classmethod
+    def load_model_with_embedded_settings(cls, manager: ModelSettingsManager):
+        load_path: str = os.path.join(manager.args["model_save_dir"], manager.args["load_saved_model"])
+        checkpoint = torch.load(load_path)
+        args: dict = checkpoint["args"]
+        kwargs: dict = checkpoint["kwargs"]
+
+        model_frame: CRNFramework = cls(**args, **kwargs)
+        model_frame.load_model(manager.args["load_saved_model"])
+        return model_frame
 
     def train(self, **kwargs) -> Tuple[float, Any]:
         self.crn.train()
