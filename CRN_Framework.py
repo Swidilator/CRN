@@ -135,7 +135,7 @@ class CRNFramework(MastersModel):
 
         dataset_features_dict: dict = {
             "instance_map": True,
-            "instance_map_processed": self.use_feature_encodings,
+            "instance_map_processed": True,
             # "feature_extractions": {"use": False, "file_path": None},
         }
 
@@ -357,7 +357,7 @@ class CRNFramework(MastersModel):
             real_img: torch.Tensor = input_dict["img"].to(self.device)
             msk: torch.Tensor = input_dict["msk"].to(self.device)
             instance: torch.Tensor = input_dict["inst"].to(self.device)
-            edge_map: torch.Tensor = input_dict["edge_map"].to(self.device)
+            edge_map: Optional[torch.Tensor] = input_dict["edge_map"].to(self.device)
 
             with self.torch_amp_autocast():
                 feature_encoding: Optional[torch.Tensor]
@@ -372,6 +372,7 @@ class CRNFramework(MastersModel):
                     )
                 else:
                     feature_encoding = None
+                    edge_map = None
 
                 fake_img: torch.Tensor = self.crn(msk, feature_encoding, edge_map)
 
@@ -498,6 +499,7 @@ class CRNFramework(MastersModel):
                     )
             else:
                 feature_encoding_total = None
+                edge_map_total = None
 
             img_out_total: torch.Tensor = self.crn(
                 msk_total, feature_encoding_total, edge_map_total

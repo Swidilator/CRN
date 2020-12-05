@@ -60,6 +60,7 @@ class CRN(torch.nn.Module):
                     final_conv_output_channel_count=0,
                     input_height_width=self.input_tensor_size,
                     norm_type=self.layer_norm_type,
+                    prev_frame_count=0
                 )
             ]
         )
@@ -75,6 +76,7 @@ class CRN(torch.nn.Module):
                     final_conv_output_channel_count=0,
                     input_height_width=(2 ** (i + 2), 2 ** (i + 3)),
                     norm_type=self.layer_norm_type,
+                    prev_frame_count=0
                 )
                 for i in range(1, self.num_rms - 1)
             ]
@@ -95,6 +97,7 @@ class CRN(torch.nn.Module):
                 * self.num_output_images,
                 input_height_width=final_image_size,
                 norm_type=self.layer_norm_type,
+                prev_frame_count=0
             )
         )
 
