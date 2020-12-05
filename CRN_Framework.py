@@ -133,12 +133,6 @@ class CRNFramework(MastersModel):
 
     def __set_data_loader__(self, **kwargs):
 
-        dataset_features_dict: dict = {
-            "instance_map": True,
-            "instance_map_processed": True,
-            # "feature_extractions": {"use": False, "file_path": None},
-        }
-
         self.__data_set_train__ = CityScapesDataset(
             output_image_height_width=self.input_image_height_width,
             root=self.dataset_path,
@@ -146,7 +140,6 @@ class CRNFramework(MastersModel):
             should_flip=self.flip_training_images,
             subset_size=self.training_subset_size,
             noise=self.use_input_image_noise,
-            dataset_features=dataset_features_dict,
             specific_model="CRN",
             use_all_classes=self.use_all_classes,
         )
@@ -166,7 +159,6 @@ class CRNFramework(MastersModel):
             should_flip=False,
             subset_size=0,
             noise=False,
-            dataset_features=dataset_features_dict,
             specific_model="CRN",
             use_all_classes=self.use_all_classes,
         )
@@ -185,7 +177,6 @@ class CRNFramework(MastersModel):
             should_flip=False,
             subset_size=0,
             noise=False,
-            dataset_features=dataset_features_dict,
             specific_model="CRN",
             use_all_classes=True,  # Since it only contains the correct amount of classes in the dataset
         )
@@ -198,7 +189,7 @@ class CRNFramework(MastersModel):
             pin_memory=True,
         )
 
-        self.num_classes = self.__data_set_train__.num_output_classes
+        self.num_classes = self.__data_set_train__.num_output_segmentation_classes
 
     def __set_model__(self, **kwargs) -> None:
 
