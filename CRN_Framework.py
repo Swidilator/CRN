@@ -89,6 +89,9 @@ class CRNFramework(MastersModel):
 
         self.__set_model__()
 
+        # Compatibility: current model uses blocks in rms. Can be set to False when loading old saves
+        self.compat_using_block_rms = True
+
     @property
     def data_set_train(self) -> torch.utils.data.Dataset:
         return self.__data_set_train__
@@ -269,16 +272,20 @@ class CRNFramework(MastersModel):
     def save_model(self, epoch: int = -1) -> None:
         super().save_model()
 
-        try:
-            assert not self.sample_only
-        except AssertionError as e:
-            raise AssertionError("Cannot save model in 'sample_only mode'")
+        if self.sample_only:
+            raise RuntimeError("Cannot save model in 'sample_only' mode.")
+
+        crn_state_dict: dict = self.crn.state_dict()
+        if not self.compat_using_block_rms:
+            crn_state_dict = {x: crn_state_dict[x] for x in crn_state_dict.keys() if "block" in x or "final" in x}
 
         save_dict: dict = {
-            "dict_crn": self.crn.state_dict(),
+            "dict_crn": crn_state_dict,
             "args": self.args,
-            "kwargs": self.kwargs
+            "kwargs": self.kwargs,
+            "compat_using_block_rms": True
         }
+
         if self.use_feature_encodings:
             save_dict.update(
                 {"dict_encoder_decoder": self.feature_encoder.state_dict()}
@@ -306,6 +313,8 @@ class CRNFramework(MastersModel):
         print(load_path)
 
         checkpoint = torch.load(load_path, map_location=self.device)
+        if "compat_using_block_rms" not in checkpoint:
+            self.compat_using_block_rms = False
         self.crn.load_state_dict(checkpoint["dict_crn"], strict=False)
         if self.use_feature_encodings:
             self.feature_encoder.load_state_dict(checkpoint["dict_encoder_decoder"])

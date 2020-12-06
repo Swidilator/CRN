@@ -79,11 +79,11 @@ class RefinementModule(nn.Module):
             )
             RefinementModule.init_conv_weights(self.final_conv)
 
-    @staticmethod
-    def init_conv_weights(conv: nn.Module) -> None:
-        # nn.init.normal_(conv.weight, mean=0.0, std=0.02)
-        nn.init.xavier_uniform_(conv.weight, gain=1)
-        nn.init.constant_(conv.bias, 0)
+        # Compatibility with old saves
+        self.conv_1 = self.rm_block_1_semantic.conv_1
+        self.norm_1 = self.rm_block_1_semantic.norm_1
+        self.conv_2 = self.rm_block_2.conv_1
+        self.norm_2 = self.rm_block_2.norm_1
 
     def forward(
         self,

@@ -3,6 +3,26 @@ import torch.nn.modules as modules
 import torchvision
 
 
+class CircularList:
+    def __init__(self, list_len: int):
+        self.len = list_len
+        self.data: list = [1.0] * list_len
+        self.pointer: int = 0
+
+    def update(self, input_value: float) -> None:
+        self.data[self.pointer] = input_value
+        if self.pointer + 1 == self.len:
+            self.pointer = 0
+        else:
+            self.pointer += 1
+
+    def sum(self) -> float:
+        return sum(self.data)
+
+    def mean(self) -> float:
+        return sum(self.data) / self.len
+
+
 class FeatureNet(modules.Module):
     def __init__(self, model: str):
         super(FeatureNet, self).__init__()
