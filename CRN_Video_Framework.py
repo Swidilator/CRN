@@ -147,14 +147,8 @@ class CRNVideoFramework(MastersModel):
 
     def __set_data_loader__(self, **kwargs):
 
-        dataset_features_dict: dict = {
-            "instance_map": True,
-            "instance_map_processed": self.use_feature_encodings,
-            # "feature_extractions": {"use": False, "file_path": None},
-        }
-
         self.__data_set_train__ = CityScapesVideoDataset2(
-            root="/home/kyle/samba_share/cityscapes_dataset/sequence",
+            root=self.dataset_path + "/sequence",
             split="train",
             should_flip=True,
             subset_size=self.training_subset_size,
