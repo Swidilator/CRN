@@ -44,14 +44,15 @@ class RefinementModule(nn.Module):
         self.use_feature_encoder: int = feature_encoder_input_channel_count > 0
         self.is_final_module: bool = self.final_conv_output_channel_count > 0
 
-        self.rm_block_1_semantic = RMBlock(
-            self.base_conv_channel_count,
-            self.total_semantic_input_channel_count,
-            self.input_height_width,
-            kernel_size=3,
-            norm_type=norm_type,
-            num_conv_groups=1,
-        )
+        if self.total_semantic_input_channel_count > 0:
+            self.rm_block_1_semantic = RMBlock(
+                self.base_conv_channel_count,
+                self.total_semantic_input_channel_count,
+                self.input_height_width,
+                kernel_size=3,
+                norm_type=norm_type,
+                num_conv_groups=1,
+            )
 
         if prev_frame_count > 0:
             self.rm_block_1_image = RMBlock(
@@ -138,26 +139,30 @@ class RefinementModule(nn.Module):
             prev_masks,
         ) = interpolate_inputs(self.input_height_width, inputs)
 
-        if not self.resnet_mode:
-            # Concatenate semantic inputs together for use in semantic entry conv
-            x_semantic_input: list = [
-                x
-                for x in (mask, prior_layers, feature_selection, edge_map, prev_masks)
-                if x is not None
-            ]
-        else:
-            x_semantic_input: list = [
-                x
-                for x in (mask, feature_selection, edge_map, prev_masks)
-                if x is not None
-            ]
+        if self.total_semantic_input_channel_count > 0:
+            if not self.resnet_mode:
+                # Concatenate semantic inputs together for use in semantic entry conv
+                x_semantic_input: list = [
+                    x
+                    for x in (mask, prior_layers, feature_selection, edge_map, prev_masks)
+                    if x is not None
+                ]
+            else:
+                x_semantic_input: list = [
+                    x
+                    for x in (mask, feature_selection, edge_map, prev_masks)
+                    if x is not None
+                ]
 
-        x_semantic: torch.Tensor = torch.cat(x_semantic_input, dim=1)
-        x = self.rm_block_1_semantic(x_semantic, relu_loc="after")
+            x_semantic: torch.Tensor = torch.cat(x_semantic_input, dim=1)
+            x = self.rm_block_1_semantic(x_semantic, relu_loc="after")
+        else:
+            mask: torch.Tensor
+            x = torch.zeros(1).to(mask.device)
 
         if self.resnet_mode and self.prior_conv_channel_count > 0:
             x_prior_layers: torch.Tensor = self.rm_block_1_resnet_adapter(prior_layers)
-            x = x + x_prior_layers
+            x = x_prior_layers + x
 
         # If previous frames are present, then pass them into the image entry conv and add them to the semantic output
         if self.prev_frame_count > 0:
