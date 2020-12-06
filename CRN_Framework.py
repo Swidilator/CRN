@@ -69,6 +69,8 @@ class CRNFramework(MastersModel):
             assert "use_loss_output_image" in kwargs
             assert "loss_scaling_method" in kwargs
             assert "layer_norm_type" in kwargs
+            assert "use_saved_feature_encodings" in kwargs
+            assert "use_resnet_rms" in kwargs
         except AssertionError as e:
             print("Missing argument: {error}".format(error=e))
             raise SystemExit
@@ -83,6 +85,7 @@ class CRNFramework(MastersModel):
         self.loss_scaling_method: str = kwargs["loss_scaling_method"]
         self.layer_norm_type: str = kwargs["layer_norm_type"]
         self.use_saved_feature_encodings: bool = kwargs["use_saved_feature_encodings"]
+        self.use_resnet_rms: bool = kwargs["use_resnet_rms"]
         # fmt: on
 
         self.__set_data_loader__()
@@ -129,6 +132,7 @@ class CRNFramework(MastersModel):
             "loss_scaling_method": manager.model_conf["CRN_LOSS_SCALING_METHOD"],
             "layer_norm_type": manager.model_conf["CRN_LAYER_NORM_TYPE"],
             "use_saved_feature_encodings": manager.model_conf["CRN_USE_SAVED_FEATURE_ENCODINGS"],
+            "use_resnet_rms": manager.model_conf["CRN_USE_RESNET_RMS"],
         }
         # fmt: on
 
@@ -224,6 +228,7 @@ class CRNFramework(MastersModel):
             num_inner_channels=self.num_inner_channels,
             use_feature_encoder=self.use_feature_encodings,
             layer_norm_type=self.layer_norm_type,
+            use_resnet_rms=self.use_resnet_rms
         )
 
         # self.crn = nn.DataParallel(self.crn, device_ids=device_ids)

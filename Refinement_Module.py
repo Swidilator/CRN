@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 from typing import List
 
-from support_scripts.components import RMBlock
+from support_scripts.components import RMBlock, ResNetBlock, Block
 
 
 class RefinementModule(nn.Module):
@@ -17,18 +17,21 @@ class RefinementModule(nn.Module):
         input_height_width: tuple,
         norm_type: str,
         prev_frame_count: int,
+        resnet_mode: bool = False
     ):
         super().__init__()
 
         self.input_height_width: tuple = input_height_width
+        self.prior_conv_channel_count: int = prior_conv_channel_count
         self.prev_frame_count: int = prev_frame_count
+        self.resnet_mode: bool = resnet_mode
 
         # Total number of input channels
         self.total_semantic_input_channel_count: int = (
             semantic_input_channel_count
             + feature_encoder_input_channel_count
             + edge_map_input_channel_count
-            + prior_conv_channel_count
+            + (prior_conv_channel_count if not resnet_mode else 0)
             + (prev_frame_count * semantic_input_channel_count)
         )
 
@@ -60,14 +63,34 @@ class RefinementModule(nn.Module):
                 num_conv_groups=1,
             )
 
-        self.rm_block_2 = RMBlock(
-            self.base_conv_channel_count,
-            self.base_conv_channel_count,
-            self.input_height_width,
-            kernel_size=3,
-            norm_type=norm_type,
-            num_conv_groups=1,
-        )
+        if resnet_mode and prior_conv_channel_count > 0:
+            self.rm_block_1_resnet_adapter = RMBlock(
+                self.base_conv_channel_count,
+                prior_conv_channel_count,
+                self.input_height_width,
+                kernel_size=3,
+                norm_type=norm_type,
+                num_conv_groups=1,
+            )
+
+        if not resnet_mode:
+            self.rm_block_2 = RMBlock(
+                self.base_conv_channel_count,
+                self.base_conv_channel_count,
+                self.input_height_width,
+                kernel_size=3,
+                norm_type=norm_type,
+                num_conv_groups=1,
+            )
+        else:
+            self.resnet_block_1 = ResNetBlock(
+                self.base_conv_channel_count,
+                self.input_height_width,
+            )
+            self.resnet_block_2 = ResNetBlock(
+                self.base_conv_channel_count,
+                self.input_height_width,
+            )
 
         if self.is_final_module:
             self.final_conv = nn.Conv2d(
@@ -77,13 +100,14 @@ class RefinementModule(nn.Module):
                 stride=1,
                 padding=0,
             )
-            RefinementModule.init_conv_weights(self.final_conv)
+            Block.init_conv_weights(self.final_conv, init_type="xavier", zero_bias=True)
 
-        # Compatibility with old saves
-        self.conv_1 = self.rm_block_1_semantic.conv_1
-        self.norm_1 = self.rm_block_1_semantic.norm_1
-        self.conv_2 = self.rm_block_2.conv_1
-        self.norm_2 = self.rm_block_2.norm_1
+        # Compatibility with old saves, resnet does not have compat
+        if not resnet_mode:
+            self.conv_1 = self.rm_block_1_semantic.conv_1
+            self.norm_1 = self.rm_block_1_semantic.norm_1
+            self.conv_2 = self.rm_block_2.conv_1
+            self.norm_2 = self.rm_block_2.norm_1
 
     def forward(
         self,
@@ -114,22 +138,38 @@ class RefinementModule(nn.Module):
             prev_masks,
         ) = interpolate_inputs(self.input_height_width, inputs)
 
-        # Concatenate semantic inputs together for use in semantic entry conv
-        x_semantic_input: list = [
-            x
-            for x in (mask, prior_layers, feature_selection, edge_map, prev_masks)
-            if x is not None
-        ]
+        if not self.resnet_mode:
+            # Concatenate semantic inputs together for use in semantic entry conv
+            x_semantic_input: list = [
+                x
+                for x in (mask, prior_layers, feature_selection, edge_map, prev_masks)
+                if x is not None
+            ]
+        else:
+            x_semantic_input: list = [
+                x
+                for x in (mask, feature_selection, edge_map, prev_masks)
+                if x is not None
+            ]
+
         x_semantic: torch.Tensor = torch.cat(x_semantic_input, dim=1)
         x = self.rm_block_1_semantic(x_semantic, relu_loc="after")
+
+        if self.resnet_mode and self.prior_conv_channel_count > 0:
+            x_prior_layers: torch.Tensor = self.rm_block_1_resnet_adapter(prior_layers)
+            x = x + x_prior_layers
 
         # If previous frames are present, then pass them into the image entry conv and add them to the semantic output
         if self.prev_frame_count > 0:
             x_image: torch.Tensor = self.rm_block_1_image(prev_frames, relu_loc="after")
             x = x + x_image
 
-        # Continue as normal
-        x = self.rm_block_2(x, relu_loc="after")
+        if not self.resnet_mode:
+            # Continue as normal
+            x = self.rm_block_2(x, relu_loc="after")
+        else:
+            x = self.resnet_block_1(x)
+            x = self.resnet_block_2(x)
 
         if self.is_final_module:
             x = self.final_conv(x)
