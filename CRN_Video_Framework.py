@@ -150,10 +150,10 @@ class CRNVideoFramework(MastersModel):
         self.__data_set_train__ = CityScapesVideoDataset2(
             root=self.dataset_path + "/sequence",
             split="train",
-            should_flip=True,
+            should_flip=False,
             subset_size=self.training_subset_size,
             output_image_height_width=self.input_image_height_width,
-            num_frames=6,
+            num_frames=4,
             frame_offset="random",
         )
 
@@ -541,6 +541,7 @@ class CRNVideoFramework(MastersModel):
 
                 if self.use_amp == "torch":
                     self.torch_gradient_scaler.scale(loss).backward()
+                    torch.nn.utils.clip_grad_norm_(self.crn.parameters(), 10)
                     self.torch_gradient_scaler.step(self.optimizer)
                     self.torch_gradient_scaler.update()
                 else:
