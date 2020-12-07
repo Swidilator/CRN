@@ -153,16 +153,18 @@ class CRNVideoFramework(MastersModel):
             should_flip=False,
             subset_size=self.training_subset_size,
             output_image_height_width=self.input_image_height_width,
-            num_frames=4,
+            num_frames=6,
             frame_offset="random",
         )
 
-        self.data_loader_train: torch.utils.data.DataLoader = torch.utils.data.DataLoader(
-            self.__data_set_train__,
-            batch_size=self.batch_size,
-            shuffle=False,
-            num_workers=self.num_data_workers,
-            pin_memory=True,
+        self.data_loader_train: torch.utils.data.DataLoader = (
+            torch.utils.data.DataLoader(
+                self.__data_set_train__,
+                batch_size=self.batch_size,
+                shuffle=False,
+                num_workers=self.num_data_workers,
+                pin_memory=True,
+            )
         )
 
         self.__data_set_val__ = CityScapesDemoVideoDataset(
@@ -196,12 +198,14 @@ class CRNVideoFramework(MastersModel):
             use_all_classes=True,  # Since it only contains the correct amount of classes in the dataset
         )
 
-        self.data_loader_video: torch.utils.data.DataLoader = torch.utils.data.DataLoader(
-            self.__data_set_video__,
-            batch_size=self.batch_size,
-            shuffle=False,
-            num_workers=self.num_data_workers,
-            pin_memory=True,
+        self.data_loader_video: torch.utils.data.DataLoader = (
+            torch.utils.data.DataLoader(
+                self.__data_set_video__,
+                batch_size=self.batch_size,
+                shuffle=False,
+                num_workers=self.num_data_workers,
+                pin_memory=True,
+            )
         )
 
         self.num_classes = self.__data_set_train__.num_output_segmentation_classes
@@ -253,16 +257,23 @@ class CRNVideoFramework(MastersModel):
             # self.loss_net = nn.DataParallel(self.loss_net, device_ids=device_ids)
             self.loss_net = self.loss_net.to(self.device)
 
-            self.flow_criterion = torch.nn.MSELoss()
+            self.flow_criterion = torch.nn.L1Loss()
 
             # Create params depending on what needs to be trained
             params = self.crn.parameters()
 
             if self.use_feature_encodings and not self.use_saved_feature_encodings:
-                params = chain(params, self.feature_encoder.parameters(),)
+                params = chain(
+                    params,
+                    self.feature_encoder.parameters(),
+                )
 
             self.optimizer = torch.optim.Adam(
-                params, lr=0.0001, betas=(0.9, 0.999), eps=1e-08, weight_decay=0,
+                params,
+                lr=0.0001,
+                betas=(0.9, 0.999),
+                eps=1e-08,
+                weight_decay=0,
             )
 
             self.normalise = transforms.Normalize(
@@ -277,7 +288,9 @@ class CRNVideoFramework(MastersModel):
             if self.use_amp == "torch":
                 from torch.cuda import amp as torch_amp
 
-                self.torch_gradient_scaler: torch_amp.GradScaler() = torch_amp.GradScaler()
+                self.torch_gradient_scaler: torch_amp.GradScaler() = (
+                    torch_amp.GradScaler()
+                )
                 self.torch_amp_autocast = torch_amp.autocast
             else:
                 self.torch_amp_autocast = nullcontext
@@ -381,8 +394,9 @@ class CRNVideoFramework(MastersModel):
                 dim=1,
             ).to(self.device)
 
-            video_loss: float = 0.0
+            torch.autograd.set_detect_anomaly(True)
 
+            video_loss: float = 0.0
             for i in range(1, num_frames):
                 self.crn.zero_grad()
 
@@ -430,26 +444,28 @@ class CRNVideoFramework(MastersModel):
                         (msk.detach(), prev_msk[:, 0 : self.num_classes]), dim=1
                     )
 
-                    real_flow: torch.Tensor = self.flownet(
-                        real_img, input_dict["img"][:, i - 1].to(self.device)
-                    ).detach().permute(0, 2, 3, 1)
+                    real_flow: torch.Tensor = (
+                        self.flownet(
+                            real_img, input_dict["img"][:, i - 1].to(self.device)
+                        )
+                        .detach()
+                        .permute(0, 2, 3, 1)
+                    )
 
                     real_flow_mask = (
-                        real_flow.permute(0, 3, 1, 2)
-                        .abs()
-                        .max(dim=1, keepdim=True)[0]
+                        real_flow.permute(0, 3, 1, 2).abs().max(dim=1, keepdim=True)[0]
                     )
                     real_flow_mask = real_flow_mask - real_flow_mask.min()
                     real_flow_mask = real_flow_mask / real_flow_mask.max()
 
                     fake_flow_viz: torch.Tensor = fz.convert_from_flow(
-                        fake_flow.detach().squeeze().cpu().numpy()
+                        fake_flow.detach().permute(0, 2, 3, 1).squeeze().cpu().numpy()
                     )
                     real_flow_viz: torch.Tensor = fz.convert_from_flow(
                         real_flow.detach().squeeze().cpu().numpy()
                     )
 
-                    show_images: bool = False
+                    show_images: bool = True
                     if show_images:
                         from matplotlib import pyplot as plt
 
@@ -517,27 +533,56 @@ class CRNVideoFramework(MastersModel):
                         # plt.title("Real Flow")
                         plt.show()
 
-                    for b in range(real_img.shape[0]):
-                        real_img[b] = self.normalise(real_img[b])
-
-                    for b in range(fake_img.shape[0]):
-                        fake_img[b] = self.normalise(fake_img[b])
-
-                    loss_img: torch.Tensor = self.loss_net(
-                        fake_img.unsqueeze(1), real_img, msk
+                    warped_real_prev_image: torch.Tensor = FlowNetWrapper.resample(
+                        prev_image[:, 3:6].detach(), fake_flow, self.crn.grid
+                    )
+                    loss_warp_scaling_factor: float = 10.0
+                    loss_warp: torch.Tensor = (
+                        self.flow_criterion(
+                            warped_real_prev_image, real_img[:, 0:3].detach()
+                        )
+                        * loss_warp_scaling_factor
                     )
 
-                    # loss_img_h: torch.Tensor = self.loss_net(
-                    #     fake_img_h.unsqueeze(1), real_img, msk
+                    loss_flow_scaling_factor: float = 10.0
+                    loss_flow: torch.Tensor = (
+                        self.flow_criterion(fake_flow.permute(0, 2, 3, 1), real_flow)
+                        * loss_flow_scaling_factor
+                    )
+
+                    # Normalise image data for use in perceptual loss
+                    real_img_normalised = real_img.clone()
+                    for b in range(real_img.shape[0]):
+                        real_img_normalised[b] = self.normalise(real_img[b].clone())
+
+                    fake_img_normalised = fake_img.clone()
+                    for b in range(fake_img.shape[0]):
+                        fake_img_normalised[b] = self.normalise(fake_img[b].clone())
+
+                    fake_img_h_normalised = fake_img_h.clone()
+                    for b in range(fake_img.shape[0]):
+                        fake_img_h_normalised[b] = self.normalise(fake_img_h[b].clone())
+
+                    # for b in range(fake_img.shape[0]):
+                    #     fake_img_h[b] = self.normalise(fake_img_h[b].clone())
+
+                    # loss_img: torch.Tensor = self.loss_net(
+                    #     fake_img.unsqueeze(1), real_img, msk
                     # )
+
+                    loss_img_h: torch.Tensor = self.loss_net(
+                        fake_img_h_normalised.unsqueeze(1), real_img_normalised, msk
+                    )
+                    # print(fake_img_h.min())
+                    # print(fake_img_h.max())
                     #
                     # loss_img_w: torch.Tensor = self.loss_net(
                     #     fake_img_w.unsqueeze(1), real_img, msk
                     # )
 
-                    loss_flow: torch.Tensor = self.flow_criterion(real_flow, fake_flow)
+                    # warped_real_prev_image: torch.Tensor = FlowNetWrapper.resample(prev_image[:, 3:6].detach(), fake_flow, self.crn.grid)
 
-                    loss: torch.Tensor = loss_img + loss_flow
+                    loss: torch.Tensor = loss_warp + loss_flow + loss_img_h
 
                 if self.use_amp == "torch":
                     self.torch_gradient_scaler.scale(loss).backward()
