@@ -17,7 +17,9 @@ class RefinementModule(nn.Module):
         input_height_width: tuple,
         norm_type: str,
         prev_frame_count: int,
-        resnet_mode: bool = False
+        resnet_mode: bool = False,
+        no_semantic_input: bool = False,
+        no_image_input: bool = True,
     ):
         super().__init__()
 
@@ -25,6 +27,8 @@ class RefinementModule(nn.Module):
         self.prior_conv_channel_count: int = prior_conv_channel_count
         self.prev_frame_count: int = prev_frame_count
         self.resnet_mode: bool = resnet_mode
+        self.no_semantic_input: bool = no_semantic_input
+        self.no_image_input: bool = no_image_input
 
         # Total number of input channels
         self.total_semantic_input_channel_count: int = (
@@ -36,7 +40,7 @@ class RefinementModule(nn.Module):
         )
 
         # Total number of input channels
-        self.total_image_input_channel_count: int = (prev_frame_count * 3)
+        self.total_image_input_channel_count: int = prev_frame_count * 3
 
         self.base_conv_channel_count: int = base_conv_channel_count
 
@@ -44,7 +48,11 @@ class RefinementModule(nn.Module):
         self.use_feature_encoder: int = feature_encoder_input_channel_count > 0
         self.is_final_module: bool = self.final_conv_output_channel_count > 0
 
-        if self.total_semantic_input_channel_count > 0:
+        if not self.no_semantic_input:
+            if self.total_semantic_input_channel_count == 0:
+                raise ValueError(
+                    "total_semantic_input_channel_count is 0 but semantic input is required."
+                )
             self.rm_block_1_semantic = RMBlock(
                 self.base_conv_channel_count,
                 self.total_semantic_input_channel_count,
@@ -54,7 +62,9 @@ class RefinementModule(nn.Module):
                 num_conv_groups=1,
             )
 
-        if prev_frame_count > 0:
+        if not self.no_image_input:
+            if self.prev_frame_count == 0:
+                raise ValueError("prev_frame_count is 0 but image input requested.")
             self.rm_block_1_image = RMBlock(
                 self.base_conv_channel_count,
                 self.total_image_input_channel_count,
@@ -64,26 +74,16 @@ class RefinementModule(nn.Module):
                 num_conv_groups=1,
             )
 
-        if resnet_mode and prior_conv_channel_count > 0:
-            self.rm_block_1_resnet_adapter = RMBlock(
-                self.base_conv_channel_count,
-                prior_conv_channel_count,
-                self.input_height_width,
-                kernel_size=3,
-                norm_type=norm_type,
-                num_conv_groups=1,
-            )
-
-        if not resnet_mode:
-            self.rm_block_2 = RMBlock(
-                self.base_conv_channel_count,
-                self.base_conv_channel_count,
-                self.input_height_width,
-                kernel_size=3,
-                norm_type=norm_type,
-                num_conv_groups=1,
-            )
-        else:
+        if resnet_mode:
+            if self.prior_conv_channel_count > 0:
+                self.rm_block_1_resnet_adapter = RMBlock(
+                    self.base_conv_channel_count,
+                    self.prior_conv_channel_count,
+                    self.input_height_width,
+                    kernel_size=3,
+                    norm_type=norm_type,
+                    num_conv_groups=1,
+                )
             self.resnet_block_1 = ResNetBlock(
                 self.base_conv_channel_count,
                 self.input_height_width,
@@ -91,6 +91,16 @@ class RefinementModule(nn.Module):
             self.resnet_block_2 = ResNetBlock(
                 self.base_conv_channel_count,
                 self.input_height_width,
+            )
+
+        else:
+            self.rm_block_2 = RMBlock(
+                self.base_conv_channel_count,
+                self.base_conv_channel_count,
+                self.input_height_width,
+                kernel_size=3,
+                norm_type=norm_type,
+                num_conv_groups=1,
             )
 
         if self.is_final_module:
@@ -104,7 +114,7 @@ class RefinementModule(nn.Module):
             Block.init_conv_weights(self.final_conv, init_type="xavier", zero_bias=True)
 
         # Compatibility with old saves, resnet does not have compat
-        if not resnet_mode:
+        if not self.resnet_mode:
             self.conv_1 = self.rm_block_1_semantic.conv_1
             self.norm_1 = self.rm_block_1_semantic.norm_1
             self.conv_2 = self.rm_block_2.conv_1
@@ -139,12 +149,19 @@ class RefinementModule(nn.Module):
             prev_masks,
         ) = interpolate_inputs(self.input_height_width, inputs)
 
-        if self.total_semantic_input_channel_count > 0:
+        # Process semantic input
+        if not self.no_semantic_input:
             if not self.resnet_mode:
                 # Concatenate semantic inputs together for use in semantic entry conv
                 x_semantic_input: list = [
                     x
-                    for x in (mask, prior_layers, feature_selection, edge_map, prev_masks)
+                    for x in (
+                        mask,
+                        prior_layers,
+                        feature_selection,
+                        edge_map,
+                        prev_masks,
+                    )
                     if x is not None
                 ]
             else:
@@ -165,9 +182,9 @@ class RefinementModule(nn.Module):
             x = x_prior_layers + x
 
         # If previous frames are present, then pass them into the image entry conv and add them to the semantic output
-        if self.prev_frame_count > 0:
+        if not self.no_image_input:
             x_image: torch.Tensor = self.rm_block_1_image(prev_frames, relu_loc="after")
-            x = x + x_image
+            x = x_image + x
 
         if not self.resnet_mode:
             # Continue as normal

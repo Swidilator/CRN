@@ -64,6 +64,8 @@ class CRNVideo(torch.nn.Module):
                     norm_type=self.layer_norm_type,
                     prev_frame_count=2,
                     resnet_mode=True,
+                    no_semantic_input=False,
+                    no_image_input=True,
                 )
             ]
         )
@@ -81,6 +83,8 @@ class CRNVideo(torch.nn.Module):
                     norm_type=self.layer_norm_type,
                     prev_frame_count=2,
                     resnet_mode=True,
+                    no_semantic_input=False,
+                    no_image_input=True,
                 )
                 for i in range(1, self.num_rms - 1)
             ]
@@ -103,6 +107,8 @@ class CRNVideo(torch.nn.Module):
                 norm_type=self.layer_norm_type,
                 prev_frame_count=2,
                 resnet_mode=True,
+                no_semantic_input=False,
+                no_image_input=True,
             )
         )
 
@@ -120,6 +126,8 @@ class CRNVideo(torch.nn.Module):
                     norm_type=self.layer_norm_type,
                     prev_frame_count=2,
                     resnet_mode=True,
+                    no_semantic_input=True,
+                    no_image_input=False,
                 )
             ]
         )
@@ -137,6 +145,8 @@ class CRNVideo(torch.nn.Module):
                     norm_type=self.layer_norm_type,
                     prev_frame_count=2,
                     resnet_mode=True,
+                    no_semantic_input=True,
+                    no_image_input=False,
                 )
                 for i in range(1, self.num_rms - 1)
             ]
@@ -158,6 +168,8 @@ class CRNVideo(torch.nn.Module):
                 norm_type=self.layer_norm_type,
                 prev_frame_count=2,
                 resnet_mode=True,
+                no_semantic_input=True,
+                no_image_input=False,
             )
         )
 
