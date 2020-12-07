@@ -9,9 +9,7 @@ import wandb
 from PIL import ImageFile
 from torchvision import transforms
 from tqdm import tqdm
-import flowiz as fz
 
-from CRN.CRN_Network import CRN
 from CRN.CRN_Video_Network import CRNVideo
 from CRN.Perceptual_Loss import PerceptualLossNetwork
 from support_scripts.components import FeatureEncoder, FlowNetWrapper
@@ -394,9 +392,12 @@ class CRNVideoFramework(MastersModel):
                 dim=1,
             ).to(self.device)
 
-            torch.autograd.set_detect_anomaly(True)
-
+            # Loss holders
             video_loss: float = 0.0
+            video_loss_h: float = 0.0
+            video_loss_flow: float = 0.0
+            video_loss_warp: float = 0.0
+
             for i in range(1, num_frames):
                 self.crn.zero_grad()
 
@@ -458,16 +459,21 @@ class CRNVideoFramework(MastersModel):
                     real_flow_mask = real_flow_mask - real_flow_mask.min()
                     real_flow_mask = real_flow_mask / real_flow_mask.max()
 
-                    fake_flow_viz: torch.Tensor = fz.convert_from_flow(
-                        fake_flow.detach().permute(0, 2, 3, 1).squeeze().cpu().numpy()
-                    )
-                    real_flow_viz: torch.Tensor = fz.convert_from_flow(
-                        real_flow.detach().squeeze().cpu().numpy()
-                    )
-
-                    show_images: bool = True
+                    show_images: bool = False
                     if show_images:
                         from matplotlib import pyplot as plt
+                        import flowiz as fz
+
+                        fake_flow_viz: torch.Tensor = fz.convert_from_flow(
+                            fake_flow.detach()
+                            .permute(0, 2, 3, 1)
+                            .squeeze()
+                            .cpu()
+                            .numpy()
+                        )
+                        real_flow_viz: torch.Tensor = fz.convert_from_flow(
+                            real_flow.detach().squeeze().cpu().numpy()
+                        )
 
                         fig, axs = plt.subplots(4, 2)
                         axs[0, 0].imshow(
@@ -563,24 +569,9 @@ class CRNVideoFramework(MastersModel):
                     for b in range(fake_img.shape[0]):
                         fake_img_h_normalised[b] = self.normalise(fake_img_h[b].clone())
 
-                    # for b in range(fake_img.shape[0]):
-                    #     fake_img_h[b] = self.normalise(fake_img_h[b].clone())
-
-                    # loss_img: torch.Tensor = self.loss_net(
-                    #     fake_img.unsqueeze(1), real_img, msk
-                    # )
-
                     loss_img_h: torch.Tensor = self.loss_net(
                         fake_img_h_normalised.unsqueeze(1), real_img_normalised, msk
                     )
-                    # print(fake_img_h.min())
-                    # print(fake_img_h.max())
-                    #
-                    # loss_img_w: torch.Tensor = self.loss_net(
-                    #     fake_img_w.unsqueeze(1), real_img, msk
-                    # )
-
-                    # warped_real_prev_image: torch.Tensor = FlowNetWrapper.resample(prev_image[:, 3:6].detach(), fake_flow, self.crn.grid)
 
                     loss: torch.Tensor = loss_warp + loss_flow + loss_img_h
 
@@ -593,12 +584,14 @@ class CRNVideoFramework(MastersModel):
                     loss.backward()
                     self.optimizer.step()
 
-                loss_total += loss.item() * self.batch_size
-                video_loss += loss.item() * self.batch_size
+                loss_total += loss.item() * self.batch_size / (num_frames - 1)
+                video_loss += loss.item() * self.batch_size / (num_frames - 1)
+
+                video_loss_h += loss_img_h.item() * self.batch_size / (num_frames - 1)
+                video_loss_flow += loss_flow.item() * self.batch_size / (num_frames - 1)
+                video_loss_warp += loss_warp.item() * self.batch_size / (num_frames - 1)
 
             if log_this_batch:
-                batch_loss_val: float = video_loss
-
                 wandb.log(
                     {
                         "Epoch_Fraction": current_epoch
@@ -606,7 +599,10 @@ class CRNVideoFramework(MastersModel):
                             (batch_idx * self.batch_size)
                             / len(self.data_loader_train.dataset)
                         ),
-                        "Batch Loss Video": batch_loss_val,
+                        "Batch Loss Video": video_loss,
+                        "Batch Loss Hallucinated": video_loss_h,
+                        "Batch Loss Warp": video_loss_warp,
+                        "Batch Loss Flow": video_loss_flow,
                     }
                 )
 
