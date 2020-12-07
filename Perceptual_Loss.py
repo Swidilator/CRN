@@ -139,7 +139,9 @@ class PerceptualLossNetwork(modules.Module):
                 )
 
                 layer_loss: torch.Tensor = self.__calculate_loss(
-                    result_gen[i], result_truth[i].detach(), label_interpolate,
+                    result_gen[i],
+                    result_truth[i].detach(),
+                    label_interpolate,
                 )
 
                 loss[b] += layer_loss / self.loss_layer_scales[i]

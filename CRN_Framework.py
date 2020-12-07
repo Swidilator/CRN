@@ -56,7 +56,7 @@ class CRNFramework(MastersModel):
             model_save_dir,
             image_save_dir,
             starting_epoch,
-            **kwargs
+            **kwargs,
         )
         self.model_name: str = "CRN"
 
@@ -151,12 +151,14 @@ class CRNFramework(MastersModel):
             use_all_classes=self.use_all_classes,
         )
 
-        self.data_loader_train: torch.utils.data.DataLoader = torch.utils.data.DataLoader(
-            self.__data_set_train__,
-            batch_size=self.batch_size,
-            shuffle=True,
-            num_workers=self.num_data_workers,
-            pin_memory=True,
+        self.data_loader_train: torch.utils.data.DataLoader = (
+            torch.utils.data.DataLoader(
+                self.__data_set_train__,
+                batch_size=self.batch_size,
+                shuffle=True,
+                num_workers=self.num_data_workers,
+                pin_memory=True,
+            )
         )
 
         self.__data_set_val__ = CityScapesDataset(
@@ -188,12 +190,14 @@ class CRNFramework(MastersModel):
             use_all_classes=True,  # Since it only contains the correct amount of classes in the dataset
         )
 
-        self.data_loader_video: torch.utils.data.DataLoader = torch.utils.data.DataLoader(
-            self.__data_set_video__,
-            batch_size=self.batch_size,
-            shuffle=False,
-            num_workers=self.num_data_workers,
-            pin_memory=True,
+        self.data_loader_video: torch.utils.data.DataLoader = (
+            torch.utils.data.DataLoader(
+                self.__data_set_video__,
+                batch_size=self.batch_size,
+                shuffle=False,
+                num_workers=self.num_data_workers,
+                pin_memory=True,
+            )
         )
 
         self.num_classes = self.__data_set_train__.num_output_segmentation_classes
@@ -228,7 +232,7 @@ class CRNFramework(MastersModel):
             num_inner_channels=self.num_inner_channels,
             use_feature_encoder=self.use_feature_encodings,
             layer_norm_type=self.layer_norm_type,
-            use_resnet_rms=self.use_resnet_rms
+            use_resnet_rms=self.use_resnet_rms,
         )
 
         # self.crn = nn.DataParallel(self.crn, device_ids=device_ids)
@@ -240,7 +244,7 @@ class CRNFramework(MastersModel):
                 self.perceptual_base_model,
                 self.device,
                 self.use_loss_output_image,
-                self.loss_scaling_method
+                self.loss_scaling_method,
             )
 
             # self.loss_net = nn.DataParallel(self.loss_net, device_ids=device_ids)
@@ -252,10 +256,17 @@ class CRNFramework(MastersModel):
             params = self.crn.parameters()
 
             if self.use_feature_encodings and not self.use_saved_feature_encodings:
-                params = chain(params, self.feature_encoder.parameters(),)
+                params = chain(
+                    params,
+                    self.feature_encoder.parameters(),
+                )
 
             self.optimizer = torch.optim.Adam(
-                params, lr=0.0001, betas=(0.9, 0.999), eps=1e-08, weight_decay=0,
+                params,
+                lr=0.0001,
+                betas=(0.9, 0.999),
+                eps=1e-08,
+                weight_decay=0,
             )
 
             self.normalise = transforms.Normalize(
@@ -266,7 +277,9 @@ class CRNFramework(MastersModel):
             if self.use_amp == "torch":
                 from torch.cuda import amp as torch_amp
 
-                self.torch_gradient_scaler: torch_amp.GradScaler() = torch_amp.GradScaler()
+                self.torch_gradient_scaler: torch_amp.GradScaler() = (
+                    torch_amp.GradScaler()
+                )
                 self.torch_amp_autocast = torch_amp.autocast
             else:
                 self.torch_amp_autocast = nullcontext
@@ -282,13 +295,17 @@ class CRNFramework(MastersModel):
 
         crn_state_dict: dict = self.crn.state_dict()
         if not self.compat_using_block_rms:
-            crn_state_dict = {x: crn_state_dict[x] for x in crn_state_dict.keys() if "block" in x or "final" in x}
+            crn_state_dict = {
+                x: crn_state_dict[x]
+                for x in crn_state_dict.keys()
+                if "block" in x or "final" in x
+            }
 
         save_dict: dict = {
             "dict_crn": crn_state_dict,
             "args": self.args,
             "kwargs": self.kwargs,
-            "compat_using_block_rms": True
+            "compat_using_block_rms": True,
         }
 
         if self.use_feature_encodings:
@@ -326,7 +343,9 @@ class CRNFramework(MastersModel):
 
     @classmethod
     def load_model_with_embedded_settings(cls, manager: ModelSettingsManager):
-        load_path: str = os.path.join(manager.args["model_save_dir"], manager.args["load_saved_model"])
+        load_path: str = os.path.join(
+            manager.args["model_save_dir"], manager.args["load_saved_model"]
+        )
         checkpoint = torch.load(load_path)
         args: dict = checkpoint["args"]
         kwargs: dict = checkpoint["kwargs"]

@@ -244,13 +244,23 @@ class CRNVideo(torch.nn.Module):
 
         # Generated image, use final gen rm
         output_gen: torch.Tensor = self.rms_list[-1](
-            msk, output_list[-1], feature_encoding, edge_map, prev_images, prev_masks,
+            msk,
+            output_list[-1],
+            feature_encoding,
+            edge_map,
+            prev_images,
+            prev_masks,
         )
         output_gen = (output_gen + 1.0) / 2.0
 
         # Optical flow and merge mask, use final flow rm
         output_flow_and_mask = self.rms_list_flow[-1](
-            msk, output_list[-1], feature_encoding, edge_map, prev_images, prev_masks,
+            msk,
+            output_list[-1],
+            feature_encoding,
+            edge_map,
+            prev_images,
+            prev_masks,
         )
         output_flow: torch.Tensor = self.flow_conv_out(output_flow_and_mask)
         output_mask: torch.Tensor = self.mask_conv_out(output_flow_and_mask)
