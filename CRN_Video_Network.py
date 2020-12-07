@@ -265,13 +265,6 @@ class CRNVideo(torch.nn.Module):
             (torch.ones_like(output_mask) - output_mask) * output_warped
         )
 
-        # TanH for squeezing outputs to [-1, 1]
-        if self.use_tanh:
-            output = self.tan_h(output).clone()
-
-        # Transform flow into standard format for losses and visualisation
-        output_flow = output_flow.permute(0, 2, 3, 1)
-
         return (
             output,
             output_gen,
