@@ -104,6 +104,16 @@ class RefinementModule(nn.Module):
             )
 
         if self.is_final_module:
+            if self.resnet_mode:
+                self.rm_block_resnet_final = RMBlock(
+                    self.base_conv_channel_count,
+                    self.base_conv_channel_count,
+                    self.input_height_width,
+                    kernel_size=3,
+                    norm_type=norm_type,
+                    num_conv_groups=1,
+                )
+
             self.final_conv = nn.Conv2d(
                 self.base_conv_channel_count,
                 self.final_conv_output_channel_count,
@@ -194,6 +204,8 @@ class RefinementModule(nn.Module):
             x = self.resnet_block_2(x)
 
         if self.is_final_module:
+            if self.resnet_mode:
+                x = self.rm_block_resnet_final(x, relu_loc="before")
             x = self.final_conv(x)
 
         return x
