@@ -18,6 +18,7 @@ class RefinementModule(nn.Module):
         norm_type: str,
         prev_frame_count: int,
         resnet_mode: bool = False,
+        num_resnet_processing_rms: int = 5,
         no_semantic_input: bool = False,
         no_image_input: bool = True,
     ):
@@ -27,6 +28,7 @@ class RefinementModule(nn.Module):
         self.prior_conv_channel_count: int = prior_conv_channel_count
         self.prev_frame_count: int = prev_frame_count
         self.resnet_mode: bool = resnet_mode
+        self.num_resnet_processing_rms: int = num_resnet_processing_rms
         self.no_semantic_input: bool = no_semantic_input
         self.no_image_input: bool = no_image_input
 
@@ -103,16 +105,21 @@ class RefinementModule(nn.Module):
                 num_conv_groups=1,
             )
 
-        if self.is_final_module:
-            if self.resnet_mode:
-                self.rm_block_resnet_final = RMBlock(
-                    self.base_conv_channel_count,
-                    self.base_conv_channel_count,
-                    self.input_height_width,
-                    kernel_size=3,
-                    norm_type=norm_type,
-                    num_conv_groups=1,
+        if self.resnet_mode:
+            self.rm_final_processing_list: nn.ModuleList = nn.ModuleList()
+            for i in range(self.num_resnet_processing_rms):
+                self.rm_final_processing_list.append(
+                    RMBlock(
+                        self.base_conv_channel_count,
+                        self.base_conv_channel_count,
+                        self.input_height_width,
+                        kernel_size=3,
+                        norm_type=norm_type,
+                        num_conv_groups=1,
+                    )
                 )
+
+        if self.is_final_module:
 
             self.final_conv = nn.Conv2d(
                 self.base_conv_channel_count,
@@ -203,9 +210,11 @@ class RefinementModule(nn.Module):
             x = self.resnet_block_1(x)
             x = self.resnet_block_2(x)
 
+            # Processing intended for final rm
+            for item in self.rm_final_processing_list:
+                x = item(x, relu_loc="before")
+
         if self.is_final_module:
-            if self.resnet_mode:
-                x = self.rm_block_resnet_final(x, relu_loc="before")
             x = self.final_conv(x)
 
         return x

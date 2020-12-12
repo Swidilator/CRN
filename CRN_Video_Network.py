@@ -20,6 +20,8 @@ class CRNVideo(torch.nn.Module):
         num_inner_channels: int,
         use_feature_encoder: bool,
         layer_norm_type: str,
+        use_resnet_rms: bool = False,
+        num_resnet_processing_rms: int = 4
     ):
         super(CRNVideo, self).__init__()
 
@@ -29,8 +31,10 @@ class CRNVideo(torch.nn.Module):
         self.num_output_images: int = num_output_images
         self.num_classes: int = num_classes
         self.num_inner_channels: int = num_inner_channels
-        self.use_feature_encoder = use_feature_encoder
-        self.layer_norm_type = layer_norm_type
+        self.use_feature_encoder: bool = use_feature_encoder
+        self.layer_norm_type: str = layer_norm_type
+        self.use_resnet_rms: bool = use_resnet_rms
+        self.num_resnet_processing_rms: int = num_resnet_processing_rms
 
         self.__NUM_OUTPUT_IMAGE_CHANNELS__: int = 3
 
@@ -63,7 +67,8 @@ class CRNVideo(torch.nn.Module):
                     input_height_width=self.input_tensor_size,
                     norm_type=self.layer_norm_type,
                     prev_frame_count=2,
-                    resnet_mode=True,
+                    resnet_mode=self.use_resnet_rms,
+                    num_resnet_processing_rms=0,
                     no_semantic_input=False,
                     no_image_input=True,
                 )
@@ -82,7 +87,8 @@ class CRNVideo(torch.nn.Module):
                     input_height_width=(2 ** (i + 2), 2 ** (i + 3)),
                     norm_type=self.layer_norm_type,
                     prev_frame_count=2,
-                    resnet_mode=True,
+                    resnet_mode=self.use_resnet_rms,
+                    num_resnet_processing_rms=0,
                     no_semantic_input=False,
                     no_image_input=True,
                 )
@@ -106,7 +112,8 @@ class CRNVideo(torch.nn.Module):
                 input_height_width=final_image_size,
                 norm_type=self.layer_norm_type,
                 prev_frame_count=2,
-                resnet_mode=True,
+                resnet_mode=self.use_resnet_rms,
+                num_resnet_processing_rms=self.num_resnet_processing_rms,
                 no_semantic_input=False,
                 no_image_input=True,
             )
@@ -126,6 +133,7 @@ class CRNVideo(torch.nn.Module):
                     norm_type=self.layer_norm_type,
                     prev_frame_count=2,
                     resnet_mode=True,
+                    num_resnet_processing_rms=0,
                     no_semantic_input=True,
                     no_image_input=False,
                 )
@@ -145,6 +153,7 @@ class CRNVideo(torch.nn.Module):
                     norm_type=self.layer_norm_type,
                     prev_frame_count=2,
                     resnet_mode=True,
+                    num_resnet_processing_rms=0,
                     no_semantic_input=True,
                     no_image_input=False,
                 )
@@ -168,6 +177,7 @@ class CRNVideo(torch.nn.Module):
                 norm_type=self.layer_norm_type,
                 prev_frame_count=2,
                 resnet_mode=True,
+                num_resnet_processing_rms=self.num_resnet_processing_rms,
                 no_semantic_input=True,
                 no_image_input=False,
             )

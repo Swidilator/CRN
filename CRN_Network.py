@@ -18,7 +18,8 @@ class CRN(torch.nn.Module):
         num_inner_channels: int,
         use_feature_encoder: bool,
         layer_norm_type: str,
-        use_resnet_rms: bool,
+        use_resnet_rms: bool = False,
+        num_resnet_processing_rms: int = 4
     ):
         super(CRN, self).__init__()
 
@@ -31,6 +32,7 @@ class CRN(torch.nn.Module):
         self.use_feature_encoder: bool = use_feature_encoder
         self.layer_norm_type: str = layer_norm_type
         self.use_resnet_rms: bool = use_resnet_rms
+        self.num_resnet_processing_rms: int = num_resnet_processing_rms
 
         self.__NUM_OUTPUT_IMAGE_CHANNELS__: int = 3
 
@@ -64,6 +66,7 @@ class CRN(torch.nn.Module):
                     norm_type=self.layer_norm_type,
                     prev_frame_count=0,
                     resnet_mode=self.use_resnet_rms,
+                    num_resnet_processing_rms=0,
                 )
             ]
         )
@@ -81,6 +84,7 @@ class CRN(torch.nn.Module):
                     norm_type=self.layer_norm_type,
                     prev_frame_count=0,
                     resnet_mode=self.use_resnet_rms,
+                    num_resnet_processing_rms=0,
                 )
                 for i in range(1, self.num_rms - 1)
             ]
@@ -103,6 +107,7 @@ class CRN(torch.nn.Module):
                 norm_type=self.layer_norm_type,
                 prev_frame_count=0,
                 resnet_mode=self.use_resnet_rms,
+                num_resnet_processing_rms=self.num_resnet_processing_rms,
             )
         )
 
