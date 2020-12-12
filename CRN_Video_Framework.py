@@ -566,11 +566,15 @@ class CRNVideoFramework(MastersModel):
                     for b in range(fake_img.shape[0]):
                         fake_img_h_normalised[b] = self.normalise(fake_img_h[b].clone())
 
+                    loss_img: torch.Tensor = self.loss_net(
+                        fake_img_normalised.unsqueeze(1), real_img_normalised, msk
+                    )
+
                     loss_img_h: torch.Tensor = self.loss_net(
                         fake_img_h_normalised.unsqueeze(1), real_img_normalised, msk
                     )
 
-                    loss: torch.Tensor = loss_warp + loss_flow + loss_img_h
+                    loss: torch.Tensor = loss_warp + loss_flow + loss_img_h + loss_img
 
                 if self.use_amp == "torch":
                     self.torch_gradient_scaler.scale(loss).backward()
