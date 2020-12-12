@@ -68,7 +68,6 @@ class CRNVideoFramework(MastersModel):
 
         try:
             assert "input_tensor_size" in kwargs
-            assert "num_output_images" in kwargs
             assert "num_inner_channels" in kwargs
             assert "perceptual_base_model" in kwargs
             assert "use_feature_encodings" in kwargs
@@ -85,7 +84,6 @@ class CRNVideoFramework(MastersModel):
 
         # fmt: off
         self.input_tensor_size: tuple = kwargs["input_tensor_size"]
-        self.num_output_images: int = kwargs["num_output_images"]
         self.num_inner_channels: int = kwargs["num_inner_channels"]
         self.perceptual_base_model: str = kwargs["perceptual_base_model"]
         self.use_feature_encodings: bool = kwargs["use_feature_encodings"]
@@ -116,7 +114,7 @@ class CRNVideoFramework(MastersModel):
 
     @property
     def wandb_trainable_model(self) -> tuple:
-        models = [self.crn]
+        models = [self.crn_video]
         if self.use_feature_encodings:
             models.append(self.feature_encoder)
         return tuple(models)
@@ -131,7 +129,6 @@ class CRNVideoFramework(MastersModel):
                 manager.model_conf["CRN_INPUT_TENSOR_SIZE_HEIGHT"],
                 manager.model_conf["CRN_INPUT_TENSOR_SIZE_WIDTH"],
             ),
-            "num_output_images": manager.model_conf["CRN_NUM_OUTPUT_IMAGES"],
             "num_inner_channels": manager.model_conf["CRN_NUM_INNER_CHANNELS"],
             "perceptual_base_model": manager.model_conf["CRN_PERCEPTUAL_BASE_MODEL"],
             "use_feature_encodings": manager.model_conf["CRN_USE_FEATURE_ENCODINGS"],
@@ -232,11 +229,10 @@ class CRNVideoFramework(MastersModel):
                 for param in self.feature_encoder.parameters():
                     param.requires_grad = True
 
-        self.crn: CRNVideo = CRNVideo(
+        self.crn_video: CRNVideo = CRNVideo(
             use_tanh=self.use_tanh,
             input_tensor_size=self.input_tensor_size,
             final_image_size=self.input_image_height_width,
-            num_output_images=self.num_output_images,
             num_classes=self.num_classes,
             num_inner_channels=self.num_inner_channels,
             use_feature_encoder=self.use_feature_encodings,
@@ -244,8 +240,8 @@ class CRNVideoFramework(MastersModel):
             num_resnet_processing_rms=self.num_resnet_processing_rms
         )
 
-        # self.crn = nn.DataParallel(self.crn, device_ids=device_ids)
-        self.crn = self.crn.to(self.device)
+        # self.crn_video = nn.DataParallel(self.crn_video, device_ids=device_ids)
+        self.crn_video = self.crn_video.to(self.device)
 
         if not self.sample_only:
 
@@ -262,7 +258,7 @@ class CRNVideoFramework(MastersModel):
             self.flow_criterion = torch.nn.L1Loss()
 
             # Create params depending on what needs to be trained
-            params = self.crn.parameters()
+            params = self.crn_video.parameters()
 
             if self.use_feature_encodings and not self.use_saved_feature_encodings:
                 params = chain(
@@ -309,7 +305,7 @@ class CRNVideoFramework(MastersModel):
             raise AssertionError("Cannot save model in 'sample_only mode'")
 
         save_dict: dict = {
-            "dict_crn": self.crn.state_dict(),
+            "dict_crn": self.crn_video.state_dict(),
             "args": self.args,
             "kwargs": self.kwargs,
         }
@@ -340,7 +336,7 @@ class CRNVideoFramework(MastersModel):
         print(load_path)
 
         checkpoint = torch.load(load_path, map_location=self.device)
-        self.crn.load_state_dict(checkpoint["dict_crn"], strict=False)
+        self.crn_video.load_state_dict(checkpoint["dict_crn"], strict=False)
         if self.use_feature_encodings:
             self.feature_encoder.load_state_dict(checkpoint["dict_encoder_decoder"])
 
@@ -358,12 +354,9 @@ class CRNVideoFramework(MastersModel):
         return model_frame
 
     def train(self, **kwargs) -> Tuple[float, Any]:
-        self.crn.train()
+        self.crn_video.train()
 
         current_epoch: int = kwargs["current_epoch"]
-
-        if "update_lambdas" in kwargs and kwargs["update_lambdas"]:
-            self.loss_net.update_lambdas()
 
         loss_total: float = 0.0
 
@@ -403,7 +396,7 @@ class CRNVideoFramework(MastersModel):
             video_loss_warp: float = 0.0
 
             for i in range(1, num_frames):
-                self.crn.zero_grad()
+                self.crn_video.zero_grad()
 
                 real_img: torch.Tensor = input_dict["img"][:, i].to(self.device)
                 msk: torch.Tensor = input_dict["msk"][:, i].to(self.device)
@@ -432,7 +425,7 @@ class CRNVideoFramework(MastersModel):
                         fake_img_w,
                         fake_flow,
                         fake_flow_mask,
-                    ) = self.crn(
+                    ) = self.crn_video(
                         msk,
                         feature_encoding,
                         edge_map if self.use_feature_encodings else None,
@@ -544,7 +537,7 @@ class CRNVideoFramework(MastersModel):
                         plt.show()
 
                     warped_real_prev_image: torch.Tensor = FlowNetWrapper.resample(
-                        prev_image[:, 3:6].detach(), fake_flow, self.crn.grid
+                        prev_image[:, 3:6].detach(), fake_flow, self.crn_video.grid
                     )
                     loss_warp_scaling_factor: float = 10.0
                     loss_warp: torch.Tensor = (
@@ -581,7 +574,7 @@ class CRNVideoFramework(MastersModel):
 
                 if self.use_amp == "torch":
                     self.torch_gradient_scaler.scale(loss).backward()
-                    torch.nn.utils.clip_grad_norm_(self.crn.parameters(), 10)
+                    torch.nn.utils.clip_grad_norm_(self.crn_video.parameters(), 10)
                     self.torch_gradient_scaler.step(self.optimizer)
                     self.torch_gradient_scaler.update()
                 else:
@@ -613,22 +606,6 @@ class CRNVideoFramework(MastersModel):
         return loss_total, None
 
     def eval(self) -> Tuple[float, Any]:
-        # self.crn.eval()
-        # with torch.no_grad():
-        #     loss_total: torch.Tensor = torch.Tensor([0.0]).to(self.device)
-        # for batch_idx, (img, msk) in enumerate(self.data_loader_val):
-        #     img: torch.Tensor = img.to(self.device)
-        #     msk: torch.Tensor = msk.to(self.device)
-        #
-        #     out: torch.Tensor = self.crn(inputs=(msk, None))
-        #
-        #     img = CRNFramework.__normalise__(img)
-        #     out = CRNFramework.__normalise__(out)
-        #
-        #     loss: torch.Tensor = self.loss_net((out, img))
-        #     loss_total = loss_total + loss.detach()
-        #     del loss, msk, img
-        # return loss_total.item(), None
         pass
 
     def sample(
@@ -636,7 +613,7 @@ class CRNVideoFramework(MastersModel):
     ) -> Union[dict, List[dict]]:
 
         # Set CRN to eval mode
-        self.crn.eval()
+        self.crn_video.eval()
         if self.use_feature_encodings:
             self.feature_encoder.eval()
 
@@ -700,7 +677,7 @@ class CRNVideoFramework(MastersModel):
             else:
                 feature_encoding_total = None
 
-            img_out_total: torch.Tensor = self.crn(
+            img_out_total: torch.Tensor = self.crn_video(
                 msk_total, feature_encoding_total, edge_map_total
             )
 
@@ -751,33 +728,3 @@ class CRNVideoFramework(MastersModel):
             else:
                 return output_dicts
 
-    @staticmethod
-    def __single_channel_normalise__(
-        channel: torch.Tensor, params: tuple
-    ) -> torch.Tensor:
-        # channel = [H ,W]   params = (mean, std)
-        return (channel - params[0]) / params[1]
-
-    @staticmethod
-    def __single_image_normalise__(image: torch.Tensor, mean, std) -> torch.Tensor:
-        for i in range(3):
-            image[i] = CRNVideoFramework.__single_channel_normalise__(
-                image[i], (mean[i], std[i])
-            )
-        return image
-
-    @staticmethod
-    def __normalise__(input_tensor: torch.Tensor) -> torch.Tensor:
-        mean = [0.485, 0.456, 0.406]
-        std = [0.229, 0.224, 0.225]
-
-        if len(input_tensor.shape) == 4:
-            for i in range(input_tensor.shape[0]):
-                input_tensor[i] = CRNVideoFramework.__single_image_normalise__(
-                    input_tensor[i], mean, std
-                )
-        else:
-            input_tensor = CRNVideoFramework.__single_image_normalise__(
-                input_tensor, mean, std
-            )
-        return input_tensor

@@ -363,9 +363,6 @@ class CRNFramework(MastersModel):
 
         current_epoch: int = kwargs["current_epoch"]
 
-        if "update_lambdas" in kwargs and kwargs["update_lambdas"]:
-            self.loss_net.update_lambdas()
-
         loss_total: float = 0.0
 
         for batch_idx, input_dict in enumerate(

@@ -15,7 +15,6 @@ class CRNVideo(torch.nn.Module):
         use_tanh: bool,
         input_tensor_size: Tuple[int, int],
         final_image_size: Tuple[int, int],
-        num_output_images: int,
         num_classes: int,
         num_inner_channels: int,
         use_feature_encoder: bool,
@@ -28,7 +27,6 @@ class CRNVideo(torch.nn.Module):
         self.use_tanh: bool = use_tanh
         self.input_tensor_size: Tuple[int, int] = input_tensor_size
         self.final_image_size: Tuple[int, int] = final_image_size
-        self.num_output_images: int = num_output_images
         self.num_classes: int = num_classes
         self.num_inner_channels: int = num_inner_channels
         self.use_feature_encoder: bool = use_feature_encoder
@@ -107,8 +105,7 @@ class CRNVideo(torch.nn.Module):
                 prior_conv_channel_count=self.rms_conv_channel_settings[
                     self.num_rms - 2
                 ],
-                final_conv_output_channel_count=self.__NUM_OUTPUT_IMAGE_CHANNELS__
-                * self.num_output_images,
+                final_conv_output_channel_count=self.__NUM_OUTPUT_IMAGE_CHANNELS__,
                 input_height_width=final_image_size,
                 norm_type=self.layer_norm_type,
                 prev_frame_count=2,
