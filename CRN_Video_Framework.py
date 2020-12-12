@@ -458,7 +458,7 @@ class CRNVideoFramework(MastersModel):
                     real_flow_mask = real_flow_mask - real_flow_mask.min()
                     real_flow_mask = real_flow_mask / real_flow_mask.max()
 
-                    show_images: bool = True
+                    show_images: bool = False
                     if show_images:
                         from matplotlib import pyplot as plt
                         import flowiz as fz
