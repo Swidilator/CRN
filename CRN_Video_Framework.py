@@ -392,6 +392,7 @@ class CRNVideoFramework(MastersModel):
 
             # Loss holders
             video_loss: float = 0.0
+            video_loss_img: float = 0.0
             video_loss_h: float = 0.0
             video_loss_flow: float = 0.0
             video_loss_warp: float = 0.0
@@ -457,7 +458,7 @@ class CRNVideoFramework(MastersModel):
                     real_flow_mask = real_flow_mask - real_flow_mask.min()
                     real_flow_mask = real_flow_mask / real_flow_mask.max()
 
-                    show_images: bool = False
+                    show_images: bool = True
                     if show_images:
                         from matplotlib import pyplot as plt
                         import flowiz as fz
@@ -589,6 +590,7 @@ class CRNVideoFramework(MastersModel):
                 loss_total += loss.item() * self.batch_size / (num_frames - 1)
                 video_loss += loss.item() * self.batch_size / (num_frames - 1)
 
+                video_loss_img += loss_img.item() * self.batch_size / (num_frames - 1)
                 video_loss_h += loss_img_h.item() * self.batch_size / (num_frames - 1)
                 video_loss_flow += loss_flow.item() * self.batch_size / (num_frames - 1)
                 video_loss_warp += loss_warp.item() * self.batch_size / (num_frames - 1)
@@ -602,6 +604,7 @@ class CRNVideoFramework(MastersModel):
                             / len(self.data_loader_train.dataset)
                         ),
                         "Batch Loss Video": video_loss,
+                        "Batch Loss Combined": video_loss_img,
                         "Batch Loss Hallucinated": video_loss_h,
                         "Batch Loss Warp": video_loss_warp,
                         "Batch Loss Flow": video_loss_flow,
