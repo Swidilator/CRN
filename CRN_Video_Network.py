@@ -5,8 +5,7 @@ import torch.nn as nn
 from math import log2
 
 from CRN.Refinement_Module import RefinementModule
-from GAN.Blocks import UCIRBlock
-from support_scripts.components import ResNetBlock, FlowNetWrapper
+from support_scripts.components import FlowNetWrapper
 
 
 class CRNVideo(torch.nn.Module):
@@ -19,8 +18,8 @@ class CRNVideo(torch.nn.Module):
         num_inner_channels: int,
         use_feature_encoder: bool,
         layer_norm_type: str,
-        use_resnet_rms: bool = False,
-        num_resnet_processing_rms: int = 4
+        use_resnet_rms: bool,
+        num_resnet_processing_rms: int
     ):
         super(CRNVideo, self).__init__()
 
@@ -129,7 +128,7 @@ class CRNVideo(torch.nn.Module):
                     input_height_width=self.input_tensor_size,
                     norm_type=self.layer_norm_type,
                     prev_frame_count=2,
-                    resnet_mode=True,
+                    resnet_mode=self.use_resnet_rms,
                     num_resnet_processing_rms=0,
                     no_semantic_input=True,
                     no_image_input=False,
@@ -149,7 +148,7 @@ class CRNVideo(torch.nn.Module):
                     input_height_width=(2 ** (i + 2), 2 ** (i + 3)),
                     norm_type=self.layer_norm_type,
                     prev_frame_count=2,
-                    resnet_mode=True,
+                    resnet_mode=self.use_resnet_rms,
                     num_resnet_processing_rms=0,
                     no_semantic_input=True,
                     no_image_input=False,
@@ -173,7 +172,7 @@ class CRNVideo(torch.nn.Module):
                 input_height_width=final_image_size,
                 norm_type=self.layer_norm_type,
                 prev_frame_count=2,
-                resnet_mode=True,
+                resnet_mode=self.use_resnet_rms,
                 num_resnet_processing_rms=self.num_resnet_processing_rms,
                 no_semantic_input=True,
                 no_image_input=False,

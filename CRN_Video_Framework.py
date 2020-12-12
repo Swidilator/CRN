@@ -237,6 +237,7 @@ class CRNVideoFramework(MastersModel):
             num_inner_channels=self.num_inner_channels,
             use_feature_encoder=self.use_feature_encodings,
             layer_norm_type=self.layer_norm_type,
+            use_resnet_rms=self.use_resnet_rms,
             num_resnet_processing_rms=self.num_resnet_processing_rms
         )
 
