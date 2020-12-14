@@ -554,7 +554,7 @@ class CRNFramework(MastersModel):
                 feature_selection: list = (
                     [transform(feature_encoding_total[batch_no])]
                     if self.use_feature_encodings
-                    else None
+                    else []
                 )
 
                 output_data_holder: SampleDataHolder = SampleDataHolder(
