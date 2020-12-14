@@ -10,9 +10,12 @@ from PIL import ImageFile
 from torchvision import transforms
 from tqdm import tqdm
 
+import flowiz as fz
+
 from CRN.CRN_Video_Network import CRNVideo
 from CRN.Perceptual_Loss import PerceptualLossNetwork
 from support_scripts.components import FeatureEncoder, FlowNetWrapper
+from support_scripts.sampling import SampleDataHolder
 from support_scripts.utils import (
     MastersModel,
     ModelSettingsManager,
@@ -43,6 +46,7 @@ class CRNVideoFramework(MastersModel):
         model_save_dir: str,
         image_save_dir: str,
         starting_epoch: int,
+        num_frames_per_video: int,
         **kwargs,
     ):
         super(CRNVideoFramework, self).__init__(
@@ -62,6 +66,7 @@ class CRNVideoFramework(MastersModel):
             model_save_dir,
             image_save_dir,
             starting_epoch,
+            num_frames_per_video,
             **kwargs,
         )
         self.model_name: str = "CRNVideo"
@@ -151,7 +156,7 @@ class CRNVideoFramework(MastersModel):
             should_flip=False,
             subset_size=self.training_subset_size,
             output_image_height_width=self.input_image_height_width,
-            num_frames=6,
+            num_frames=self.num_frames_per_video,
             frame_offset="random",
         )
 
@@ -165,23 +170,24 @@ class CRNVideoFramework(MastersModel):
             )
         )
 
-        self.__data_set_val__ = CityScapesDemoVideoDataset(
-            output_image_height_width=self.input_image_height_width,
-            root=self.dataset_path,
+        self.__data_set_val__ = CityScapesVideoDataset2(
+            root=self.dataset_path + "/sequence",
             split="val",
             should_flip=False,
             subset_size=0,
-            noise=False,
-            specific_model="CRN",
-            num_frames=16,
-            use_all_classes=self.use_all_classes,
+            output_image_height_width=self.input_image_height_width,
+            num_frames=self.num_frames_per_video,
+            frame_offset="random",
         )
 
-        self.data_loader_val: torch.utils.data.DataLoader = torch.utils.data.DataLoader(
-            self.__data_set_val__,
-            batch_size=self.batch_size,
-            shuffle=True,
-            num_workers=self.num_data_workers,
+        self.data_loader_val: torch.utils.data.DataLoader = (
+            torch.utils.data.DataLoader(
+                self.__data_set_val__,
+                batch_size=self.batch_size,
+                shuffle=False,
+                num_workers=self.num_data_workers,
+                pin_memory=True,
+            )
         )
 
         self.__data_set_video__ = CityScapesDemoVideoDataset(
@@ -238,7 +244,7 @@ class CRNVideoFramework(MastersModel):
             use_feature_encoder=self.use_feature_encodings,
             layer_norm_type=self.layer_norm_type,
             use_resnet_rms=self.use_resnet_rms,
-            num_resnet_processing_rms=self.num_resnet_processing_rms
+            num_resnet_processing_rms=self.num_resnet_processing_rms,
         )
 
         # self.crn_video = nn.DataParallel(self.crn_video, device_ids=device_ids)
@@ -437,7 +443,10 @@ class CRNVideoFramework(MastersModel):
 
                     # Previous outputs stored for input later
                     prev_image = torch.cat(
-                        (fake_img.detach().clone().clamp(0.0, 1.0), prev_image[:, 0:3]),
+                        (
+                            fake_img.detach().clone().clamp(0.0, 1.0),
+                            prev_image[:, 0:3],
+                        ),
                         dim=1,
                     )
                     prev_msk = torch.cat(
@@ -451,92 +460,6 @@ class CRNVideoFramework(MastersModel):
                         .detach()
                         .permute(0, 2, 3, 1)
                     )
-
-                    real_flow_mask = (
-                        real_flow.permute(0, 3, 1, 2).abs().max(dim=1, keepdim=True)[0]
-                    )
-                    real_flow_mask = real_flow_mask - real_flow_mask.min()
-                    real_flow_mask = real_flow_mask / real_flow_mask.max()
-
-                    show_images: bool = False
-                    if show_images:
-                        from matplotlib import pyplot as plt
-                        import flowiz as fz
-
-                        fake_flow_viz: torch.Tensor = fz.convert_from_flow(
-                            fake_flow.detach()
-                            .permute(0, 2, 3, 1)
-                            .squeeze()
-                            .cpu()
-                            .numpy()
-                        )
-                        real_flow_viz: torch.Tensor = fz.convert_from_flow(
-                            real_flow.detach().squeeze().cpu().numpy()
-                        )
-
-                        fig, axs = plt.subplots(4, 2)
-                        axs[0, 0].imshow(
-                            prev_image[:, 0:3]
-                            .squeeze()
-                            .permute(1, 2, 0)
-                            .cpu()
-                            .clamp(0.0, 1.0)
-                            .numpy()
-                        )
-
-                        axs[0, 1].imshow(
-                            real_img[:, 0:3]
-                            .squeeze()
-                            .permute(1, 2, 0)
-                            .cpu()
-                            .clamp(0.0, 1.0)
-                            .numpy()
-                        )
-
-                        axs[1, 0].imshow(
-                            fake_img_h.detach()
-                            .squeeze()
-                            .permute(1, 2, 0)
-                            .cpu()
-                            .clamp(0.0, 1.0)
-                            .numpy()
-                        )
-
-                        axs[1, 1].imshow(
-                            fake_img_w.detach()
-                            .squeeze()
-                            .permute(1, 2, 0)
-                            .cpu()
-                            .clamp(0.0, 1.0)
-                            .numpy()
-                        )
-
-                        # plt.title("Image")
-                        fake_flow_mask_viz = (
-                            fake_flow_mask.detach()
-                            .squeeze()
-                            .cpu()
-                            .clamp(0.0, 1.0)
-                            .numpy()
-                        )
-                        axs[2, 0].imshow(fake_flow_mask_viz)
-
-                        real_flow_mask_viz = (
-                            real_flow_mask.detach()
-                            .squeeze()
-                            .cpu()
-                            .clamp(0.0, 1.0)
-                            .numpy()
-                        )
-                        axs[2, 1].imshow(real_flow_mask_viz)
-
-                        axs[3, 0].imshow(fake_flow_viz)
-                        # plt.title("Flow")
-
-                        axs[3, 1].imshow(real_flow_viz)
-
-                        # plt.title("Real Flow")
-                        plt.show()
 
                     warped_real_prev_image: torch.Tensor = FlowNetWrapper.resample(
                         prev_image[:, 3:6].detach(), fake_flow, self.crn_video.grid
@@ -620,18 +543,23 @@ class CRNVideoFramework(MastersModel):
         self, image_numbers: Union[int, tuple], video_dataset: bool = False
     ) -> Union[dict, List[dict]]:
 
+        assert (
+            type(image_numbers) is int or len(image_numbers) == 1
+        ), "Video networks only support 1 image at a time"
+
         # Set CRN to eval mode
         self.crn_video.eval()
         if self.use_feature_encodings:
             self.feature_encoder.eval()
 
         with torch.no_grad():
+
             transform: transforms.ToPILImage = transforms.ToPILImage()
 
             if isinstance(image_numbers, int):
                 image_numbers = (image_numbers,)
 
-            batch_size: int = len(image_numbers)
+            output_data_holders: list = []
 
             first_img: bool = True
             msk_total: Optional[torch.Tensor] = None
@@ -645,7 +573,6 @@ class CRNVideoFramework(MastersModel):
                     input_dict = self.__data_set_val__[image_no]
                 else:
                     input_dict = self.__data_set_video__[image_no]
-                # img, msk, msk_colour, instance, instance_processed, feature_selection
 
                 msk = input_dict["msk"].to(self.device).unsqueeze(0)
                 msk_colour = input_dict["msk_colour"].float().unsqueeze(0)
@@ -685,54 +612,123 @@ class CRNVideoFramework(MastersModel):
             else:
                 feature_encoding_total = None
 
-            img_out_total: torch.Tensor = self.crn_video(
-                msk_total, feature_encoding_total, edge_map_total
+            prev_image = torch.cat(
+                (
+                    original_img_total[:, 0],
+                    torch.zeros_like(original_img_total[:, 0]),
+                ),
+                dim=1,
+            ).to(self.device)
+            prev_msk = torch.cat(
+                (
+                    msk_total[:, 0],
+                    torch.zeros_like(msk_total[:, 0]),
+                ),
+                dim=1,
+            ).to(self.device)
+
+            reference_image_list: list = []
+            mask_colour_list: list = []
+            output_image_list: list = []
+            # feature_selection_list: list = []
+            hallucinated_image_list: list = []
+            warped_image_list: list = []
+            combination_weights_list: list = []
+            output_flow_list: list = []
+            reference_flow_list: list = []
+
+            for frame_no in range(1, self.num_frames_per_video):
+                self.crn_video.zero_grad()
+
+                real_img: torch.Tensor = original_img_total[:, frame_no]
+                msk: torch.Tensor = msk_total[:, frame_no]
+                # instance: torch.Tensor = instance_original_total[:, frame_no].to(self.device)
+                edge_map: torch.Tensor = edge_map_total[:, frame_no].to(self.device)
+
+                fake_img: torch.Tensor
+                fake_flow: torch.Tensor
+                (
+                    fake_img,
+                    fake_img_h,
+                    fake_img_w,
+                    fake_flow,
+                    fake_flow_mask,
+                ) = self.crn_video(
+                    msk,
+                    None,
+                    None,
+                    prev_image,
+                    prev_msk,
+                )
+
+                # Previous outputs stored for input later
+                prev_image = torch.cat(
+                    (fake_img.detach().clone().clamp(0.0, 1.0), prev_image[:, 0:3]),
+                    dim=1,
+                )
+                prev_msk = torch.cat(
+                    (msk.detach(), prev_msk[:, 0 : self.num_classes]), dim=1
+                )
+
+                real_flow: torch.Tensor = (
+                    self.flownet(
+                        real_img, original_img_total[:, frame_no - 1].to(self.device)
+                    )
+                    .detach()
+                    .permute(0, 2, 3, 1)
+                )
+
+                fake_flow_viz: torch.Tensor = (
+                    torch.tensor(
+                        fz.convert_from_flow(
+                            fake_flow.permute(0, 2, 3, 1).squeeze().cpu().numpy()
+                        )
+                    )
+                    .permute(2, 0, 1)
+                    .float()
+                    / 255.0
+                )
+
+                real_flow_viz: torch.Tensor = (
+                    torch.tensor(
+                        fz.convert_from_flow(real_flow.squeeze().cpu().numpy())
+                    )
+                    .permute(2, 0, 1)
+                    .float()
+                    / 255.0
+                )
+
+                reference_image_list.append(transform(real_img.squeeze().cpu()))
+                mask_colour_list.append(transform(msk_colour_total[0, frame_no]))
+                output_image_list.append(
+                    transform(fake_img.squeeze().clamp(0.0, 1.0).cpu())
+                )
+                hallucinated_image_list.append(
+                    transform(fake_img_h.squeeze().clamp(0.0, 1.0).cpu())
+                )
+                warped_image_list.append(
+                    transform(fake_img_w.squeeze().clamp(0.0, 1.0).cpu())
+                )
+                combination_weights_list.append(transform(fake_flow_mask[0, 0].cpu()))
+                output_flow_list.append(transform(fake_flow_viz))
+                reference_flow_list.append(transform(real_flow_viz))
+
+            output_data_holder: SampleDataHolder = SampleDataHolder(
+                image_index=image_no,
+                video_sample=True,
+                reference_image=reference_image_list,
+                mask_colour=mask_colour_list,
+                output_image=output_image_list,
+                hallucinated_image=hallucinated_image_list,
+                warped_image=warped_image_list,
+                combination_weights=combination_weights_list,
+                output_flow=output_flow_list,
+                reference_flow=reference_flow_list,
             )
 
-            # Clamp image to within correct bounds
-            img_out_total = img_out_total.clamp(0.0, 1.0)
+            output_data_holders.append(output_data_holder)
 
-            # # Drop batch dimension
-            # img_out = img_out.squeeze(0).cpu()
-
-            # Bring images to CPU
-            img_out_total = img_out_total.cpu()
-            original_img_total = original_img_total.cpu()
-            msk_colour_total = msk_colour_total.cpu()
-            if self.use_feature_encodings:
-                feature_encoding_total = feature_encoding_total.cpu()
-
-            output_dicts: list = []
-
-            for batch_no in range(batch_size):
-
-                split_images = [
-                    transform(single_img) for single_img in img_out_total[batch_no]
-                ]
-
-                output_img_dict: dict = {
-                    "output_img_{i}".format(i=i): img
-                    for i, img in enumerate(split_images)
-                }
-                if self.use_feature_encodings:
-                    output_img_dict.update(
-                        {
-                            "feature_selection": transform(
-                                feature_encoding_total[batch_no]
-                            )
-                        }
-                    )
-
-                output_dict: dict = {
-                    "image_index": image_numbers[batch_no],
-                    "original_img": transform(original_img_total[batch_no]),
-                    "msk_colour": transform(msk_colour_total[batch_no]),
-                    "output_img_dict": output_img_dict,
-                }
-                output_dicts.append(output_dict)
-
-            if len(output_dicts) == 1:
-                return output_dicts[0]
+            if len(output_data_holders) == 1:
+                return output_data_holders[0]
             else:
-                return output_dicts
-
+                return output_data_holders

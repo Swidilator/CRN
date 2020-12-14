@@ -19,7 +19,7 @@ class CRN(torch.nn.Module):
         use_feature_encoder: bool,
         layer_norm_type: str,
         use_resnet_rms: bool,
-        num_resnet_processing_rms: int
+        num_resnet_processing_rms: int,
     ):
         super(CRN, self).__init__()
 

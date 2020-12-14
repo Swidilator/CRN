@@ -14,6 +14,7 @@ from CRN.CRN_Network import CRN
 from CRN.Perceptual_Loss import PerceptualLossNetwork
 from support_scripts.components import FeatureEncoder
 from support_scripts.utils import MastersModel, ModelSettingsManager, CityScapesDataset
+from support_scripts.sampling import SampleDataHolder
 
 ImageFile.LOAD_TRUNCATED_IMAGES = True
 
@@ -236,7 +237,7 @@ class CRNFramework(MastersModel):
             use_feature_encoder=self.use_feature_encodings,
             layer_norm_type=self.layer_norm_type,
             use_resnet_rms=self.use_resnet_rms,
-            num_resnet_processing_rms=self.num_resnet_processing_rms
+            num_resnet_processing_rms=self.num_resnet_processing_rms,
         )
 
         # self.crn = nn.DataParallel(self.crn, device_ids=device_ids)
@@ -485,7 +486,6 @@ class CRNFramework(MastersModel):
                     input_dict = self.__data_set_val__[image_no]
                 else:
                     input_dict = self.__data_set_video__[image_no]
-                # img, msk, msk_colour, instance, instance_processed, feature_selection
 
                 msk = input_dict["msk"].to(self.device).unsqueeze(0)
                 msk_colour = input_dict["msk_colour"].float().unsqueeze(0)
@@ -543,7 +543,7 @@ class CRNFramework(MastersModel):
             if self.use_feature_encodings:
                 feature_encoding_total = feature_encoding_total.cpu()
 
-            output_dicts: list = []
+            output_data_holders: list = []
 
             for batch_no in range(batch_size):
 
@@ -551,31 +551,27 @@ class CRNFramework(MastersModel):
                     transform(single_img) for single_img in img_out_total[batch_no]
                 ]
 
-                output_img_dict: dict = {
-                    "output_img_{i}".format(i=i): img
-                    for i, img in enumerate(split_images)
-                }
-                if self.use_feature_encodings:
-                    output_img_dict.update(
-                        {
-                            "feature_selection": transform(
-                                feature_encoding_total[batch_no]
-                            )
-                        }
-                    )
+                feature_selection: list = (
+                    [transform(feature_encoding_total[batch_no])]
+                    if self.use_feature_encodings
+                    else None
+                )
 
-                output_dict: dict = {
-                    "image_index": image_numbers[batch_no],
-                    "original_img": transform(original_img_total[batch_no]),
-                    "msk_colour": transform(msk_colour_total[batch_no]),
-                    "output_img_dict": output_img_dict,
-                }
-                output_dicts.append(output_dict)
+                output_data_holder: SampleDataHolder = SampleDataHolder(
+                    image_index=image_numbers[batch_no],
+                    video_sample=False,
+                    reference_image=[transform(original_img_total[batch_no])],
+                    mask_colour=[transform(msk_colour_total[batch_no])],
+                    output_image=split_images,
+                    feature_selection=feature_selection,
+                )
 
-            if len(output_dicts) == 1:
-                return output_dicts[0]
+                output_data_holders.append(output_data_holder)
+
+            if len(output_data_holders) == 1:
+                return output_data_holders[0]
             else:
-                return output_dicts
+                return output_data_holders
 
     @staticmethod
     def __single_channel_normalise__(
