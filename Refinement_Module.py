@@ -50,6 +50,7 @@ class RefinementModule(nn.Module):
         self.final_conv_output_channel_count: int = final_conv_output_channel_count
         self.use_feature_encoder: int = feature_encoder_input_channel_count > 0
         self.is_final_module: bool = is_final_module
+        self.is_first_module: bool = self.prior_conv_channel_count == 0
 
         if not self.no_semantic_input:
             if self.total_semantic_input_channel_count == 0:
@@ -78,7 +79,9 @@ class RefinementModule(nn.Module):
             )
 
         if resnet_mode:
-            if self.prior_conv_channel_count != self.base_conv_channel_count:
+            if (
+                self.prior_conv_channel_count != self.base_conv_channel_count
+            ) and not self.is_first_module:
                 self.rm_block_1_resnet_adapter = RMBlock(
                     self.base_conv_channel_count,
                     self.prior_conv_channel_count,
@@ -198,7 +201,11 @@ class RefinementModule(nn.Module):
             mask: torch.Tensor
             x = None
 
-        if self.resnet_mode and self.prior_conv_channel_count != self.base_conv_channel_count:
+        if (
+            self.resnet_mode
+            and (self.prior_conv_channel_count != self.base_conv_channel_count)
+            and not self.is_first_module
+        ):
             x_prior_layers: torch.Tensor = self.rm_block_1_resnet_adapter(prior_layers)
             x = x_prior_layers + x if x is not None else x_prior_layers
 
