@@ -17,8 +17,8 @@ class RefinementModule(nn.Module):
         input_height_width: tuple,
         norm_type: str,
         prev_frame_count: int,
+        num_resnet_processing_rms: int,
         resnet_mode: bool = False,
-        num_resnet_processing_rms: int = 5,
         no_semantic_input: bool = False,
         no_image_input: bool = True,
     ):
@@ -107,22 +107,25 @@ class RefinementModule(nn.Module):
 
         if self.resnet_mode:
             self.rm_final_processing_list: nn.ModuleList = nn.ModuleList()
-            for i in range(self.num_resnet_processing_rms):
-                self.rm_final_processing_list.append(
-                    RMBlock(
-                        self.base_conv_channel_count,
-                        self.base_conv_channel_count,
-                        self.input_height_width,
-                        kernel_size=3,
-                        norm_type=norm_type,
-                        num_conv_groups=1,
+            if self.num_resnet_processing_rms > 0:
+                for i in range(self.num_resnet_processing_rms + 1):
+                    self.rm_final_processing_list.append(
+                        RMBlock(
+                            self.base_conv_channel_count
+                            if i < self.num_resnet_processing_rms
+                            else 32,
+                            self.base_conv_channel_count,
+                            self.input_height_width,
+                            kernel_size=3,
+                            norm_type=norm_type,
+                            num_conv_groups=1,
+                        )
                     )
-                )
 
         if self.is_final_module:
 
             self.final_conv = nn.Conv2d(
-                self.base_conv_channel_count,
+                self.base_conv_channel_count if not self.resnet_mode else 32,
                 self.final_conv_output_channel_count,
                 kernel_size=1,
                 stride=1,

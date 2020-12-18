@@ -183,7 +183,7 @@ class CRNVideo(torch.nn.Module):
         self.flow_conv_out: nn.Sequential = nn.Sequential(
             nn.ReflectionPad2d(3),
             nn.Conv2d(
-                self.rms_conv_channel_settings[self.num_rms - 1],
+                32,
                 2,
                 kernel_size=7,
                 padding=0,
@@ -194,7 +194,7 @@ class CRNVideo(torch.nn.Module):
         self.mask_conv_out: nn.Sequential = nn.Sequential(
             nn.ReflectionPad2d(3),
             nn.Conv2d(
-                self.rms_conv_channel_settings[self.num_rms - 1],
+                32,
                 1,
                 kernel_size=7,
                 padding=0,
