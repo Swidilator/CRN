@@ -78,12 +78,12 @@ class RefinementModule(nn.Module):
             )
 
         if resnet_mode:
-            if self.prior_conv_channel_count > 0:
+            if self.prior_conv_channel_count != self.base_conv_channel_count:
                 self.rm_block_1_resnet_adapter = RMBlock(
                     self.base_conv_channel_count,
                     self.prior_conv_channel_count,
                     self.input_height_width,
-                    kernel_size=3,
+                    kernel_size=1,
                     norm_type=norm_type,
                     num_conv_groups=1,
                 )
@@ -196,16 +196,16 @@ class RefinementModule(nn.Module):
             x = self.rm_block_1_semantic(x_semantic, relu_loc="after")
         else:
             mask: torch.Tensor
-            x = torch.zeros(1).to(mask.device)
+            x = None
 
-        if self.resnet_mode and self.prior_conv_channel_count > 0:
+        if self.resnet_mode and self.prior_conv_channel_count != self.base_conv_channel_count:
             x_prior_layers: torch.Tensor = self.rm_block_1_resnet_adapter(prior_layers)
-            x = x_prior_layers + x
+            x = x_prior_layers + x if x is not None else x_prior_layers
 
         # If previous frames are present, then pass them into the image entry conv and add them to the semantic output
         if not self.no_image_input:
             x_image: torch.Tensor = self.rm_block_1_image(prev_frames, relu_loc="after")
-            x = x_image + x
+            x = x_image + x if x is not None else x_image
 
         if not self.resnet_mode:
             # Continue as normal
