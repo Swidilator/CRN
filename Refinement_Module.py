@@ -14,6 +14,7 @@ class RefinementModule(nn.Module):
         base_conv_channel_count: int,
         prior_conv_channel_count: int,
         final_conv_output_channel_count: int,
+        is_final_module: bool,
         input_height_width: tuple,
         norm_type: str,
         prev_frame_count: int,
@@ -48,7 +49,7 @@ class RefinementModule(nn.Module):
 
         self.final_conv_output_channel_count: int = final_conv_output_channel_count
         self.use_feature_encoder: int = feature_encoder_input_channel_count > 0
-        self.is_final_module: bool = self.final_conv_output_channel_count > 0
+        self.is_final_module: bool = is_final_module
 
         if not self.no_semantic_input:
             if self.total_semantic_input_channel_count == 0:
@@ -105,33 +106,33 @@ class RefinementModule(nn.Module):
                 num_conv_groups=1,
             )
 
-        if self.resnet_mode:
-            self.rm_final_processing_list: nn.ModuleList = nn.ModuleList()
-            if self.num_resnet_processing_rms > 0:
-                for i in range(self.num_resnet_processing_rms + 1):
-                    self.rm_final_processing_list.append(
-                        RMBlock(
-                            self.base_conv_channel_count
-                            if i < self.num_resnet_processing_rms
-                            else 32,
-                            self.base_conv_channel_count,
-                            self.input_height_width,
-                            kernel_size=3,
-                            norm_type=norm_type,
-                            num_conv_groups=1,
-                        )
-                    )
-
         if self.is_final_module:
+            if self.resnet_mode:
+                self.rm_final_processing_list: nn.ModuleList = nn.ModuleList()
+                if self.num_resnet_processing_rms > 0:
+                    for i in range(self.num_resnet_processing_rms):
+                        self.rm_final_processing_list.append(
+                            RMBlock(
+                                self.base_conv_channel_count,
+                                self.base_conv_channel_count,
+                                self.input_height_width,
+                                kernel_size=3,
+                                norm_type=norm_type,
+                                num_conv_groups=1,
+                            )
+                        )
 
-            self.final_conv = nn.Conv2d(
-                self.base_conv_channel_count if not self.resnet_mode else 32,
-                self.final_conv_output_channel_count,
-                kernel_size=1,
-                stride=1,
-                padding=0,
-            )
-            Block.init_conv_weights(self.final_conv, init_type="xavier", zero_bias=True)
+            if self.final_conv_output_channel_count > 0:
+                self.final_conv = nn.Conv2d(
+                    self.base_conv_channel_count,
+                    self.final_conv_output_channel_count,
+                    kernel_size=1,
+                    stride=1,
+                    padding=0,
+                )
+                Block.init_conv_weights(
+                    self.final_conv, init_type="xavier", zero_bias=True
+                )
 
         # Compatibility with old saves, resnet does not have compat
         if not self.resnet_mode:
@@ -214,11 +215,13 @@ class RefinementModule(nn.Module):
             x = self.resnet_block_2(x)
 
             # Processing intended for final rm
-            for item in self.rm_final_processing_list:
-                x = item(x, relu_loc="before")
 
         if self.is_final_module:
-            x = self.final_conv(x)
+            if self.resnet_mode:
+                for item in self.rm_final_processing_list:
+                    x = item(x, relu_loc="before")
+            if self.final_conv_output_channel_count > 0:
+                x = self.final_conv(x)
 
         return x
 

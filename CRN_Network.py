@@ -62,6 +62,7 @@ class CRN(torch.nn.Module):
                     base_conv_channel_count=self.rms_conv_channel_settings[0],
                     prior_conv_channel_count=0,
                     final_conv_output_channel_count=0,
+                    is_final_module=False,
                     input_height_width=self.input_tensor_size,
                     norm_type=self.layer_norm_type,
                     prev_frame_count=0,
@@ -80,6 +81,7 @@ class CRN(torch.nn.Module):
                     base_conv_channel_count=self.rms_conv_channel_settings[i],
                     prior_conv_channel_count=self.rms_conv_channel_settings[i - 1],
                     final_conv_output_channel_count=0,
+                    is_final_module=False,
                     input_height_width=(2 ** (i + 2), 2 ** (i + 3)),
                     norm_type=self.layer_norm_type,
                     prev_frame_count=0,
@@ -103,6 +105,7 @@ class CRN(torch.nn.Module):
                 ],
                 final_conv_output_channel_count=self.__NUM_OUTPUT_IMAGE_CHANNELS__
                 * self.num_output_images,
+                is_final_module=True,
                 input_height_width=final_image_size,
                 norm_type=self.layer_norm_type,
                 prev_frame_count=0,
