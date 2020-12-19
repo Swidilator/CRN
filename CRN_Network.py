@@ -67,6 +67,7 @@ class CRN(torch.nn.Module):
                     norm_type=self.layer_norm_type,
                     prev_frame_count=0,
                     resnet_mode=self.use_resnet_rms,
+                    resnet_no_add=False,
                     num_resnet_processing_rms=0,
                 )
             ]
@@ -86,6 +87,7 @@ class CRN(torch.nn.Module):
                     norm_type=self.layer_norm_type,
                     prev_frame_count=0,
                     resnet_mode=self.use_resnet_rms,
+                    resnet_no_add=False,
                     num_resnet_processing_rms=0,
                 )
                 for i in range(1, self.num_rms - 1)
@@ -110,6 +112,7 @@ class CRN(torch.nn.Module):
                 norm_type=self.layer_norm_type,
                 prev_frame_count=0,
                 resnet_mode=self.use_resnet_rms,
+                resnet_no_add=True,
                 num_resnet_processing_rms=self.num_resnet_processing_rms,
             )
         )

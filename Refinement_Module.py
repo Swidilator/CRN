@@ -20,6 +20,7 @@ class RefinementModule(nn.Module):
         prev_frame_count: int,
         num_resnet_processing_rms: int,
         resnet_mode: bool = False,
+        resnet_no_add: bool = False,
         no_semantic_input: bool = False,
         no_image_input: bool = True,
     ):
@@ -29,6 +30,7 @@ class RefinementModule(nn.Module):
         self.prior_conv_channel_count: int = prior_conv_channel_count
         self.prev_frame_count: int = prev_frame_count
         self.resnet_mode: bool = resnet_mode
+        self.resnet_no_add: bool = resnet_no_add
         self.num_resnet_processing_rms: int = num_resnet_processing_rms
         self.no_semantic_input: bool = no_semantic_input
         self.no_image_input: bool = no_image_input
@@ -93,10 +95,12 @@ class RefinementModule(nn.Module):
             self.resnet_block_1 = ResNetBlock(
                 self.base_conv_channel_count,
                 self.input_height_width,
+                self.resnet_no_add
             )
             self.resnet_block_2 = ResNetBlock(
                 self.base_conv_channel_count,
                 self.input_height_width,
+                self.resnet_no_add
             )
 
         else:
