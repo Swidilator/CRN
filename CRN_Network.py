@@ -124,11 +124,11 @@ class CRN(torch.nn.Module):
         self, msk: torch.Tensor, feature_encoding: torch.Tensor, edge_map: torch.Tensor
     ) -> torch.Tensor:
 
-        output: torch.Tensor = self.rms_list[0](msk, None, feature_encoding, edge_map)
+        intermediate_output, out_img, _, _ = self.rms_list[0](msk, None, feature_encoding, edge_map)
         for i in range(1, len(self.rms_list)):
-            output = self.rms_list[i](msk, output, feature_encoding, edge_map)
+            intermediate_output, out_img, _, _ = self.rms_list[i](msk, intermediate_output, feature_encoding, edge_map)
 
-        a, b, c = torch.chunk(output.unsqueeze(2), 3, 1)
+        a, b, c = torch.chunk(out_img.unsqueeze(2), 3, 1)
         output = torch.cat((a, b, c), 2)
 
         # TanH for squeezing outputs to [-1, 1]

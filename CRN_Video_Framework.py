@@ -180,14 +180,12 @@ class CRNVideoFramework(MastersModel):
             frame_offset="random",
         )
 
-        self.data_loader_val: torch.utils.data.DataLoader = (
-            torch.utils.data.DataLoader(
-                self.__data_set_val__,
-                batch_size=self.batch_size,
-                shuffle=False,
-                num_workers=self.num_data_workers,
-                pin_memory=True,
-            )
+        self.data_loader_val: torch.utils.data.DataLoader = torch.utils.data.DataLoader(
+            self.__data_set_val__,
+            batch_size=self.batch_size,
+            shuffle=False,
+            num_workers=self.num_data_workers,
+            pin_memory=True,
         )
 
         self.__data_set_video__ = CityScapesDemoVideoDataset(
@@ -215,7 +213,6 @@ class CRNVideoFramework(MastersModel):
         self.num_classes = self.__data_set_train__.num_output_segmentation_classes
 
     def __set_model__(self, **kwargs) -> None:
-
         # Feature Encoder
         if self.use_feature_encodings:
             self.feature_encoder: FeatureEncoder = FeatureEncoder(

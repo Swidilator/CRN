@@ -178,7 +178,7 @@ class CRNVideo(torch.nn.Module):
                 prior_conv_channel_count=self.rms_conv_channel_settings[
                     self.num_rms - 2
                 ],
-                final_conv_output_channel_count=32,
+                final_conv_output_channel_count=256,
                 is_final_module=True,
                 input_height_width=final_image_size,
                 norm_type=self.layer_norm_type,
@@ -188,31 +188,32 @@ class CRNVideo(torch.nn.Module):
                 num_resnet_processing_rms=self.num_resnet_processing_rms,
                 no_semantic_input=True,
                 no_image_input=False,
+                is_flow_output=True
             )
         )
 
-        # Conv for generating optical flow
-        self.flow_conv_out: nn.Sequential = nn.Sequential(
-            nn.ReflectionPad2d(3),
-            nn.Conv2d(
-                32,
-                2,
-                kernel_size=7,
-                padding=0,
-            ),
-        )
-
-        # Conv for generating merge mask
-        self.mask_conv_out: nn.Sequential = nn.Sequential(
-            nn.ReflectionPad2d(3),
-            nn.Conv2d(
-                32,
-                1,
-                kernel_size=7,
-                padding=0,
-            ),
-            nn.Sigmoid(),
-        )
+        # # Conv for generating optical flow
+        # self.flow_conv_out: nn.Sequential = nn.Sequential(
+        #     nn.ReflectionPad2d(3),
+        #     nn.Conv2d(
+        #         256,
+        #         2,
+        #         kernel_size=7,
+        #         padding=0,
+        #     ),
+        # )
+        #
+        # # Conv for generating merge mask
+        # self.mask_conv_out: nn.Sequential = nn.Sequential(
+        #     nn.ReflectionPad2d(3),
+        #     nn.Conv2d(
+        #         256,
+        #         1,
+        #         kernel_size=7,
+        #         padding=0,
+        #     ),
+        #     nn.Sigmoid(),
+        # )
 
         if self.use_tanh:
             self.tan_h = nn.Tanh()
@@ -235,10 +236,10 @@ class CRNVideo(torch.nn.Module):
         output_list: list = [
             self.rms_list[0](
                 msk, None, feature_encoding, edge_map, prev_images, prev_masks
-            )
+            )[0]
             + self.rms_list_flow[0](
                 msk, None, feature_encoding, edge_map, prev_images, prev_masks
-            )
+            )[0]
         ]
         for i in range(1, len(self.rms_list) - 1):
             output_list.append(
@@ -249,7 +250,7 @@ class CRNVideo(torch.nn.Module):
                     edge_map,
                     prev_images,
                     prev_masks,
-                )
+                )[0]
                 + self.rms_list_flow[i](
                     msk,
                     output_list[-1],
@@ -257,7 +258,7 @@ class CRNVideo(torch.nn.Module):
                     edge_map,
                     prev_images,
                     prev_masks,
-                )
+                )[0]
             )
 
         # Generated image, use final gen rm
@@ -268,7 +269,7 @@ class CRNVideo(torch.nn.Module):
             edge_map,
             prev_images,
             prev_masks,
-        )
+        )[1]
         output_gen = (output_gen + 1.0) / 2.0
 
         # Optical flow and merge mask, use final flow rm
@@ -279,9 +280,11 @@ class CRNVideo(torch.nn.Module):
             edge_map,
             prev_images,
             prev_masks,
-        )
-        output_flow: torch.Tensor = self.flow_conv_out(output_flow_and_mask)
-        output_mask: torch.Tensor = self.mask_conv_out(output_flow_and_mask)
+        )[2:]
+        # output_flow: torch.Tensor = self.flow_conv_out(output_flow_and_mask)
+        # output_mask: torch.Tensor = self.mask_conv_out(output_flow_and_mask)
+        output_flow = output_flow_and_mask[0]
+        output_mask = output_flow_and_mask[1]
 
         # Warp prior frame with flow
         output_warped: torch.Tensor = FlowNetWrapper.resample(
