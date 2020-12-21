@@ -505,6 +505,7 @@ class CRNVideoFramework(MastersModel):
                     self.torch_gradient_scaler.update()
                 else:
                     loss.backward()
+                    torch.nn.utils.clip_grad_norm_(self.crn_video.parameters(), 10)
                     self.optimizer.step()
 
                 loss_total += loss.item() * self.batch_size / (num_frames - 1)
