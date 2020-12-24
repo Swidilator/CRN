@@ -41,6 +41,7 @@ class CRNFramework(MastersModel):
         num_frames_per_video: int,
         num_prior_frames: int,
         use_optical_flow: bool,
+        prior_frame_seed_type: str,
         **kwargs,
     ):
         super(CRNFramework, self).__init__(
@@ -63,6 +64,7 @@ class CRNFramework(MastersModel):
             num_frames_per_video,
             num_prior_frames,
             use_optical_flow,
+            prior_frame_seed_type,
             **kwargs,
         )
         self.model_name: str = "CRN"

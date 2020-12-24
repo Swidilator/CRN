@@ -19,7 +19,6 @@ from support_scripts.sampling import SampleDataHolder
 from support_scripts.utils import (
     MastersModel,
     ModelSettingsManager,
-    CityScapesDataset,
     CityScapesDemoVideoDataset,
 )
 from support_scripts.utils.datasets.custom_video_datasets import CityScapesVideoDataset2
@@ -49,6 +48,7 @@ class CRNVideoFramework(MastersModel):
         num_frames_per_video: int,
         num_prior_frames: int,
         use_optical_flow: bool,
+        prior_frame_seed_type: str,
         **kwargs,
     ):
         super(CRNVideoFramework, self).__init__(
@@ -71,6 +71,7 @@ class CRNVideoFramework(MastersModel):
             num_frames_per_video,
             num_prior_frames,
             use_optical_flow,
+            prior_frame_seed_type,
             **kwargs,
         )
         self.model_name: str = "CRNVideo"
@@ -393,8 +394,9 @@ class CRNVideoFramework(MastersModel):
             ] * self.num_prior_frames
 
             if self.num_prior_frames > 0:
-                prior_image_list[0] = input_dict["img"][:, 0].to(self.device)
-                prior_msk_list[0] = input_dict["msk"][:, 0].to(self.device)
+                if self.prior_frame_seed_type == "real":
+                    prior_image_list[0] = input_dict["img"][:, 0].to(self.device)
+                    prior_msk_list[0] = input_dict["msk"][:, 0].to(self.device)
 
             # Loss holders
             video_loss: float = 0.0
@@ -633,8 +635,9 @@ class CRNVideoFramework(MastersModel):
             ] * self.num_prior_frames
 
             if self.num_prior_frames > 0:
-                prior_image_list[0] = original_img_total[:, 0].to(self.device)
-                prior_msk_list[0] = msk_total[:, 0].to(self.device)
+                if self.prior_frame_seed_type == "real":
+                    prior_image_list[0] = original_img_total[:, 0].to(self.device)
+                    prior_msk_list[0] = msk_total[:, 0].to(self.device)
 
             reference_image_list: list = []
             mask_colour_list: list = []
@@ -679,7 +682,7 @@ class CRNVideoFramework(MastersModel):
                 ) = self.crn_video(
                     msk,
                     feature_encoding,
-                    edge_map,
+                    edge_map if self.use_feature_encodings else None,
                     torch.cat(prior_image_list, dim=1)
                     if self.num_prior_frames > 0
                     else None,
