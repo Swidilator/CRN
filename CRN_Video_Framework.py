@@ -88,6 +88,7 @@ class CRNVideoFramework(MastersModel):
             assert "use_resnet_rms" in kwargs
             assert "flownet_save_path" in kwargs
             assert "num_resnet_processing_rms" in kwargs
+            assert "use_edge_map" in kwargs
         except AssertionError as e:
             print("Missing argument: {error}".format(error=e))
             raise SystemExit
@@ -104,6 +105,7 @@ class CRNVideoFramework(MastersModel):
         self.use_resnet_rms: bool = kwargs["use_resnet_rms"]
         self.flownet_save_path: str = kwargs["flownet_save_path"]  # This is in args
         self.num_resnet_processing_rms: int = kwargs["num_resnet_processing_rms"]
+        self.use_edge_map: bool = kwargs["use_edge_map"]
         # fmt: on
 
         self.__set_data_loader__()
@@ -148,6 +150,7 @@ class CRNVideoFramework(MastersModel):
             "use_saved_feature_encodings": manager.model_conf["CRN_USE_SAVED_FEATURE_ENCODINGS"],
             "use_resnet_rms": manager.model_conf["CRN_USE_RESNET_RMS"],
             "num_resnet_processing_rms": manager.model_conf["CRN_NUM_RESNET_PROCESSING_RMS"],
+            "use_edge_map": manager.model_conf["CRN_USE_EDGE_MAP"],
         }
         # fmt: on
 
@@ -249,6 +252,7 @@ class CRNVideoFramework(MastersModel):
             num_resnet_processing_rms=self.num_resnet_processing_rms,
             num_prior_frames=self.num_prior_frames,
             use_optical_flow=self.use_optical_flow,
+            use_edge_map=self.use_edge_map
         )
 
         # self.crn_video = nn.DataParallel(self.crn_video, device_ids=device_ids)
@@ -438,7 +442,7 @@ class CRNVideoFramework(MastersModel):
                     ) = self.crn_video(
                         msk,
                         feature_encoding,
-                        edge_map if self.use_feature_encodings else None,
+                        edge_map if self.use_edge_map else None,
                         torch.cat(prior_image_list, dim=1)
                         if self.num_prior_frames > 0
                         else None,
@@ -682,7 +686,7 @@ class CRNVideoFramework(MastersModel):
                 ) = self.crn_video(
                     msk,
                     feature_encoding,
-                    edge_map if self.use_feature_encodings else None,
+                    edge_map if self.use_edge_map else None,
                     torch.cat(prior_image_list, dim=1)
                     if self.num_prior_frames > 0
                     else None,

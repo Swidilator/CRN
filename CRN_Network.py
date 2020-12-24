@@ -20,6 +20,7 @@ class CRN(torch.nn.Module):
         layer_norm_type: str,
         use_resnet_rms: bool,
         num_resnet_processing_rms: int,
+        use_edge_map: bool,
     ):
         super(CRN, self).__init__()
 
@@ -33,6 +34,7 @@ class CRN(torch.nn.Module):
         self.layer_norm_type: str = layer_norm_type
         self.use_resnet_rms: bool = use_resnet_rms
         self.num_resnet_processing_rms: int = num_resnet_processing_rms
+        self.use_edge_map: bool = use_edge_map
 
         self.__NUM_OUTPUT_IMAGE_CHANNELS__: int = 3
 
@@ -58,7 +60,7 @@ class CRN(torch.nn.Module):
                 RefinementModule(
                     semantic_input_channel_count=self.num_classes,
                     feature_encoder_input_channel_count=(self.use_feature_encoder * 3),
-                    edge_map_input_channel_count=(self.use_feature_encoder * 1),
+                    edge_map_input_channel_count=(self.use_edge_map * 1),
                     base_conv_channel_count=self.rms_conv_channel_settings[0],
                     prior_conv_channel_count=0,
                     final_conv_output_channel_count=0,
@@ -78,7 +80,7 @@ class CRN(torch.nn.Module):
                 RefinementModule(
                     semantic_input_channel_count=self.num_classes,
                     feature_encoder_input_channel_count=(self.use_feature_encoder * 3),
-                    edge_map_input_channel_count=(self.use_feature_encoder * 1),
+                    edge_map_input_channel_count=(self.use_edge_map * 1),
                     base_conv_channel_count=self.rms_conv_channel_settings[i],
                     prior_conv_channel_count=self.rms_conv_channel_settings[i - 1],
                     final_conv_output_channel_count=0,
@@ -98,7 +100,7 @@ class CRN(torch.nn.Module):
             RefinementModule(
                 semantic_input_channel_count=self.num_classes,
                 feature_encoder_input_channel_count=(self.use_feature_encoder * 3),
-                edge_map_input_channel_count=(self.use_feature_encoder * 1),
+                edge_map_input_channel_count=(self.use_edge_map * 1),
                 base_conv_channel_count=self.rms_conv_channel_settings[
                     self.num_rms - 1
                 ],

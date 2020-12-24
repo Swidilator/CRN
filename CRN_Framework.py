@@ -81,6 +81,7 @@ class CRNFramework(MastersModel):
             assert "use_saved_feature_encodings" in kwargs
             assert "use_resnet_rms" in kwargs
             assert "num_resnet_processing_rms" in kwargs
+            assert "use_edge_map" in kwargs
         except AssertionError as e:
             print("Missing argument: {error}".format(error=e))
             raise SystemExit
@@ -97,6 +98,7 @@ class CRNFramework(MastersModel):
         self.use_saved_feature_encodings: bool = kwargs["use_saved_feature_encodings"]
         self.use_resnet_rms: bool = kwargs["use_resnet_rms"]
         self.num_resnet_processing_rms: int = kwargs["num_resnet_processing_rms"]
+        self.use_edge_map: bool = kwargs["use_edge_map"]
         # fmt: on
 
         self.__set_data_loader__()
@@ -145,6 +147,7 @@ class CRNFramework(MastersModel):
             "use_saved_feature_encodings": manager.model_conf["CRN_USE_SAVED_FEATURE_ENCODINGS"],
             "use_resnet_rms": manager.model_conf["CRN_USE_RESNET_RMS"],
             "num_resnet_processing_rms": manager.model_conf["CRN_NUM_RESNET_PROCESSING_RMS"],
+            "use_edge_map": manager.model_conf["CRN_USE_EDGE_MAP"],
         }
         # fmt: on
 
@@ -246,6 +249,7 @@ class CRNFramework(MastersModel):
             layer_norm_type=self.layer_norm_type,
             use_resnet_rms=self.use_resnet_rms,
             num_resnet_processing_rms=self.num_resnet_processing_rms,
+            use_edge_map=self.use_edge_map,
         )
 
         # self.crn = nn.DataParallel(self.crn, device_ids=device_ids)
@@ -406,9 +410,10 @@ class CRNFramework(MastersModel):
                     )
                 else:
                     feature_encoding = None
-                    edge_map = None
 
-                fake_img: torch.Tensor = self.crn(msk, feature_encoding, edge_map)
+                fake_img: torch.Tensor = self.crn(
+                    msk, feature_encoding, edge_map if self.use_edge_map else None
+                )
 
                 for b in range(real_img.shape[0]):
                     real_img[b] = self.normalise(real_img[b])
@@ -532,10 +537,9 @@ class CRNFramework(MastersModel):
                     )
             else:
                 feature_encoding_total = None
-                edge_map_total = None
 
             img_out_total: torch.Tensor = self.crn(
-                msk_total, feature_encoding_total, edge_map_total
+                msk_total, feature_encoding_total, edge_map_total if self.use_edge_map else None
             )
 
             # Clamp image to within correct bounds
