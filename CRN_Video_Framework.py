@@ -47,6 +47,8 @@ class CRNVideoFramework(MastersModel):
         image_save_dir: str,
         starting_epoch: int,
         num_frames_per_video: int,
+        num_prior_frames: int,
+        use_optical_flow: bool,
         **kwargs,
     ):
         super(CRNVideoFramework, self).__init__(
@@ -67,6 +69,8 @@ class CRNVideoFramework(MastersModel):
             image_save_dir,
             starting_epoch,
             num_frames_per_video,
+            num_prior_frames,
+            use_optical_flow,
             **kwargs,
         )
         self.model_name: str = "CRNVideo"
@@ -164,7 +168,7 @@ class CRNVideoFramework(MastersModel):
             torch.utils.data.DataLoader(
                 self.__data_set_train__,
                 batch_size=self.batch_size,
-                shuffle=False,
+                shuffle=True,
                 num_workers=self.num_data_workers,
                 pin_memory=True,
             )
@@ -242,6 +246,8 @@ class CRNVideoFramework(MastersModel):
             layer_norm_type=self.layer_norm_type,
             use_resnet_rms=self.use_resnet_rms,
             num_resnet_processing_rms=self.num_resnet_processing_rms,
+            num_prior_frames=self.num_prior_frames,
+            use_optical_flow=self.use_optical_flow,
         )
 
         # self.crn_video = nn.DataParallel(self.crn_video, device_ids=device_ids)
@@ -283,8 +289,9 @@ class CRNVideoFramework(MastersModel):
             )
 
             # Flownet for video training
-            self.flownet = FlowNetWrapper(self.flownet_save_path)
-            self.flownet = self.flownet.to(self.device)
+            if self.use_optical_flow:
+                self.flownet = FlowNetWrapper(self.flownet_save_path)
+                self.flownet = self.flownet.to(self.device)
 
             # Mixed precision
             if self.use_amp == "torch":
@@ -378,20 +385,16 @@ class CRNVideoFramework(MastersModel):
                 break
 
             # prev_image: torch.Tensor = torch.zeros_like(input_dict["img"][:,0]).to(self.device)
-            prev_image = torch.cat(
-                (
-                    input_dict["img"][:, 0],
-                    torch.zeros_like(input_dict["img"][:, 0]),
-                ),
-                dim=1,
-            ).to(self.device)
-            prev_msk = torch.cat(
-                (
-                    input_dict["msk"][:, 0],
-                    torch.zeros_like(input_dict["msk"][:, 0]),
-                ),
-                dim=1,
-            ).to(self.device)
+            prior_image_list: list = [
+                torch.zeros_like(input_dict["img"][:, 0]).to(self.device)
+            ] * self.num_prior_frames
+            prior_msk_list: list = [
+                torch.zeros_like(input_dict["msk"][:, 0]).to(self.device)
+            ] * self.num_prior_frames
+
+            if self.num_prior_frames > 0:
+                prior_image_list[0] = input_dict["img"][:, 0].to(self.device)
+                prior_msk_list[0] = input_dict["msk"][:, 0].to(self.device)
 
             # Loss holders
             video_loss: float = 0.0
@@ -434,45 +437,12 @@ class CRNVideoFramework(MastersModel):
                         msk,
                         feature_encoding,
                         edge_map if self.use_feature_encodings else None,
-                        prev_image,
-                        prev_msk,
-                    )
-
-                    # Previous outputs stored for input later
-                    prev_image = torch.cat(
-                        (
-                            fake_img.detach().clone().clamp(0.0, 1.0),
-                            prev_image[:, 0:3],
-                        ),
-                        dim=1,
-                    )
-                    prev_msk = torch.cat(
-                        (msk.detach(), prev_msk[:, 0 : self.num_classes]), dim=1
-                    )
-
-                    real_flow: torch.Tensor = (
-                        self.flownet(
-                            real_img, input_dict["img"][:, i - 1].to(self.device)
-                        )
-                        .detach()
-                        .permute(0, 2, 3, 1)
-                    )
-
-                    warped_real_prev_image: torch.Tensor = FlowNetWrapper.resample(
-                        prev_image[:, 3:6].detach(), fake_flow, self.crn_video.grid
-                    )
-                    loss_warp_scaling_factor: float = 10.0
-                    loss_warp: torch.Tensor = (
-                        self.flow_criterion(
-                            warped_real_prev_image, real_img[:, 0:3].detach()
-                        )
-                        * loss_warp_scaling_factor
-                    )
-
-                    loss_flow_scaling_factor: float = 10.0
-                    loss_flow: torch.Tensor = (
-                        self.flow_criterion(fake_flow.permute(0, 2, 3, 1), real_flow)
-                        * loss_flow_scaling_factor
+                        torch.cat(prior_image_list, dim=1)
+                        if self.num_prior_frames > 0
+                        else None,
+                        torch.cat(prior_msk_list, dim=1)
+                        if self.num_prior_frames > 0
+                        else None,
                     )
 
                     # Normalise image data for use in perceptual loss
@@ -484,19 +454,77 @@ class CRNVideoFramework(MastersModel):
                     for b in range(fake_img.shape[0]):
                         fake_img_normalised[b] = self.normalise(fake_img[b].clone())
 
-                    fake_img_h_normalised = fake_img_h.clone()
-                    for b in range(fake_img.shape[0]):
-                        fake_img_h_normalised[b] = self.normalise(fake_img_h[b].clone())
+                    loss_warp = torch.zeros(1).to(self.device)
+                    loss_flow = torch.zeros(1).to(self.device)
+                    loss_img_h = torch.zeros(1).to(self.device)
+                    # Previous outputs stored for input later
+                    if self.num_prior_frames > 0:
 
+                        prior_image_list = [
+                            fake_img.detach().clone().clamp(0.0, 1.0),
+                            *prior_image_list[1 : self.num_prior_frames],
+                        ]
+                        prior_msk_list = [
+                            msk.detach(),
+                            *prior_msk_list[1 : self.num_prior_frames],
+                        ]
+
+                        if self.use_optical_flow:
+                            # Normalise generated image and calculate loss
+                            fake_img_h_normalised = fake_img_h.clone()
+                            for b in range(fake_img.shape[0]):
+                                fake_img_h_normalised[b] = self.normalise(
+                                    fake_img_h[b].clone()
+                                )
+
+                            loss_img_h: torch.Tensor = self.loss_net(
+                                fake_img_h_normalised.unsqueeze(1),
+                                real_img_normalised,
+                                msk,
+                            )
+
+                            # Generate reference optical flow
+                            real_flow: torch.Tensor = (
+                                self.flownet(
+                                    real_img,
+                                    input_dict["img"][:, i - 1].to(self.device),
+                                )
+                                .detach()
+                                .permute(0, 2, 3, 1)
+                            )
+
+                            # Warp prior reference image and compare to warped prior image
+                            warped_real_prev_image: torch.Tensor = (
+                                FlowNetWrapper.resample(
+                                    prior_image_list[1].detach(),
+                                    fake_flow,
+                                    self.crn_video.grid,
+                                )
+                            )
+                            loss_warp_scaling_factor: float = 10.0
+                            loss_warp: torch.Tensor = (
+                                self.flow_criterion(
+                                    warped_real_prev_image, real_img[:, 0:3].detach()
+                                )
+                                * loss_warp_scaling_factor
+                            )
+
+                            # Calculate direct comparison optical flow loss
+                            loss_flow_scaling_factor: float = 10.0
+                            loss_flow: torch.Tensor = (
+                                self.flow_criterion(
+                                    fake_flow.permute(0, 2, 3, 1), real_flow
+                                )
+                                * loss_flow_scaling_factor
+                            )
+
+                    # Calculate loss on final network output image
                     loss_img: torch.Tensor = self.loss_net(
                         fake_img_normalised.unsqueeze(1), real_img_normalised, msk
                     )
 
-                    loss_img_h: torch.Tensor = self.loss_net(
-                        fake_img_h_normalised.unsqueeze(1), real_img_normalised, msk
-                    )
-
-                    loss: torch.Tensor = loss_warp + loss_flow + loss_img_h + loss_img
+                    # Add losses together
+                    loss: torch.Tensor = loss_img + loss_img_h + loss_warp + loss_flow
 
                 if self.use_amp == "torch":
                     self.torch_gradient_scaler.scale(loss).backward()
@@ -597,38 +625,21 @@ class CRNVideoFramework(MastersModel):
                         (original_img_total, original_img), dim=0
                     )
 
-            feature_encoding: Optional[torch.Tensor]
-            if self.use_feature_encodings:
-                if self.use_saved_feature_encodings:
-                    feature_encoding_total = self.feature_encoder.sample_using_means(
-                        instance_original_total, msk_total
-                    )
-                else:
-                    feature_encoding_total = self.feature_encoder(
-                        original_img_total, instance_original_total
-                    )
-            else:
-                feature_encoding_total = None
+            prior_image_list: list = [
+                torch.zeros_like(original_img_total[:, 0]).to(self.device)
+            ] * self.num_prior_frames
+            prior_msk_list: list = [
+                torch.zeros_like(msk_total[:, 0]).to(self.device)
+            ] * self.num_prior_frames
 
-            prev_image = torch.cat(
-                (
-                    original_img_total[:, 0],
-                    torch.zeros_like(original_img_total[:, 0]),
-                ),
-                dim=1,
-            ).to(self.device)
-            prev_msk = torch.cat(
-                (
-                    msk_total[:, 0],
-                    torch.zeros_like(msk_total[:, 0]),
-                ),
-                dim=1,
-            ).to(self.device)
+            if self.num_prior_frames > 0:
+                prior_image_list[0] = original_img_total[:, 0].to(self.device)
+                prior_msk_list[0] = msk_total[:, 0].to(self.device)
 
             reference_image_list: list = []
             mask_colour_list: list = []
             output_image_list: list = []
-            # feature_selection_list: list = []
+            feature_selection_list: list = []
             hallucinated_image_list: list = []
             warped_image_list: list = []
             combination_weights_list: list = []
@@ -640,8 +651,22 @@ class CRNVideoFramework(MastersModel):
 
                 real_img: torch.Tensor = original_img_total[:, frame_no]
                 msk: torch.Tensor = msk_total[:, frame_no]
-                # instance: torch.Tensor = instance_original_total[:, frame_no].to(self.device)
+                instance: torch.Tensor = instance_original_total[:, frame_no].to(
+                    self.device
+                )
+                # feature_encoding: torch.Tensor = feature_encoding_total[:, frame_no].to(self.device)
                 edge_map: torch.Tensor = edge_map_total[:, frame_no].to(self.device)
+
+                feature_encoding: Optional[torch.Tensor]
+                if self.use_feature_encodings:
+                    if self.use_saved_feature_encodings:
+                        feature_encoding = self.feature_encoder.sample_using_means(
+                            instance, msk
+                        )
+                    else:
+                        feature_encoding = self.feature_encoder(real_img, instance)
+                else:
+                    feature_encoding = None
 
                 fake_img: torch.Tensor
                 fake_flow: torch.Tensor
@@ -653,63 +678,77 @@ class CRNVideoFramework(MastersModel):
                     fake_flow_mask,
                 ) = self.crn_video(
                     msk,
-                    None,
-                    None,
-                    prev_image,
-                    prev_msk,
+                    feature_encoding,
+                    edge_map,
+                    torch.cat(prior_image_list, dim=1)
+                    if self.num_prior_frames > 0
+                    else None,
+                    torch.cat(prior_msk_list, dim=1)
+                    if self.num_prior_frames > 0
+                    else None,
                 )
 
                 # Previous outputs stored for input later
-                prev_image = torch.cat(
-                    (fake_img.detach().clone().clamp(0.0, 1.0), prev_image[:, 0:3]),
-                    dim=1,
-                )
-                prev_msk = torch.cat(
-                    (msk.detach(), prev_msk[:, 0 : self.num_classes]), dim=1
-                )
+                if self.num_prior_frames > 0:
+                    prior_image_list = [
+                        fake_img.detach().clone().clamp(0.0, 1.0),
+                        *prior_image_list[1 : self.num_prior_frames],
+                    ]
+                    prior_msk_list = [
+                        msk.detach(),
+                        *prior_msk_list[1 : self.num_prior_frames],
+                    ]
 
-                real_flow: torch.Tensor = (
-                    self.flownet(
-                        real_img, original_img_total[:, frame_no - 1].to(self.device)
-                    )
-                    .detach()
-                    .permute(0, 2, 3, 1)
-                )
-
-                fake_flow_viz: torch.Tensor = (
-                    torch.tensor(
-                        fz.convert_from_flow(
-                            fake_flow.permute(0, 2, 3, 1).squeeze().cpu().numpy()
+                if self.use_optical_flow:
+                    real_flow: torch.Tensor = (
+                        self.flownet(
+                            real_img,
+                            original_img_total[:, frame_no - 1].to(self.device),
                         )
+                        .detach()
+                        .permute(0, 2, 3, 1)
                     )
-                    .permute(2, 0, 1)
-                    .float()
-                    / 255.0
-                )
 
-                real_flow_viz: torch.Tensor = (
-                    torch.tensor(
-                        fz.convert_from_flow(real_flow.squeeze().cpu().numpy())
+                    fake_flow_viz: torch.Tensor = (
+                        torch.tensor(
+                            fz.convert_from_flow(
+                                fake_flow.permute(0, 2, 3, 1).squeeze().cpu().numpy()
+                            )
+                        )
+                        .permute(2, 0, 1)
+                        .float()
+                        / 255.0
                     )
-                    .permute(2, 0, 1)
-                    .float()
-                    / 255.0
-                )
+
+                    real_flow_viz: torch.Tensor = (
+                        torch.tensor(
+                            fz.convert_from_flow(real_flow.squeeze().cpu().numpy())
+                        )
+                        .permute(2, 0, 1)
+                        .float()
+                        / 255.0
+                    )
+                    hallucinated_image_list.append(
+                        transform(fake_img_h.squeeze().clamp(0.0, 1.0).cpu())
+                    )
+                    warped_image_list.append(
+                        transform(fake_img_w.squeeze().clamp(0.0, 1.0).cpu())
+                    )
+                    combination_weights_list.append(
+                        transform(fake_flow_mask[0, 0].cpu())
+                    )
+                    output_flow_list.append(transform(fake_flow_viz))
+                    reference_flow_list.append(transform(real_flow_viz))
 
                 reference_image_list.append(transform(real_img.squeeze().cpu()))
                 mask_colour_list.append(transform(msk_colour_total[0, frame_no]))
                 output_image_list.append(
                     transform(fake_img.squeeze().clamp(0.0, 1.0).cpu())
                 )
-                hallucinated_image_list.append(
-                    transform(fake_img_h.squeeze().clamp(0.0, 1.0).cpu())
-                )
-                warped_image_list.append(
-                    transform(fake_img_w.squeeze().clamp(0.0, 1.0).cpu())
-                )
-                combination_weights_list.append(transform(fake_flow_mask[0, 0].cpu()))
-                output_flow_list.append(transform(fake_flow_viz))
-                reference_flow_list.append(transform(real_flow_viz))
+                if self.use_feature_encodings:
+                    feature_selection_list.append(
+                        transform(feature_encoding.squeeze().cpu())
+                    )
 
             output_data_holder: SampleDataHolder = SampleDataHolder(
                 image_index=image_no,
@@ -722,6 +761,7 @@ class CRNVideoFramework(MastersModel):
                 combination_weights=combination_weights_list,
                 output_flow=output_flow_list,
                 reference_flow=reference_flow_list,
+                feature_selection=feature_selection_list,
             )
 
             output_data_holders.append(output_data_holder)

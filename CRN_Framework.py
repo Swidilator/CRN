@@ -38,6 +38,9 @@ class CRNFramework(MastersModel):
         model_save_dir: str,
         image_save_dir: str,
         starting_epoch: int,
+        num_frames_per_video: int,
+        num_prior_frames: int,
+        use_optical_flow: bool,
         **kwargs,
     ):
         super(CRNFramework, self).__init__(
@@ -57,6 +60,9 @@ class CRNFramework(MastersModel):
             model_save_dir,
             image_save_dir,
             starting_epoch,
+            num_frames_per_video,
+            num_prior_frames,
+            use_optical_flow,
             **kwargs,
         )
         self.model_name: str = "CRN"

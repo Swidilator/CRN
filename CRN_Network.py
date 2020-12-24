@@ -1,4 +1,4 @@
-from typing import Tuple, List, Optional, Union
+from typing import Tuple
 
 import torch
 import torch.nn as nn
@@ -55,66 +55,45 @@ class CRN(torch.nn.Module):
 
         self.rms_list: nn.ModuleList = nn.ModuleList(
             [
-                RefinementModule(
-                    semantic_input_channel_count=self.num_classes,
-                    feature_encoder_input_channel_count=(self.use_feature_encoder * 3),
-                    edge_map_input_channel_count=(self.use_feature_encoder * 1),
-                    base_conv_channel_count=self.rms_conv_channel_settings[0],
-                    prior_conv_channel_count=0,
-                    final_conv_output_channel_count=0,
-                    is_final_module=False,
-                    input_height_width=self.input_tensor_size,
-                    norm_type=self.layer_norm_type,
-                    prev_frame_count=0,
-                    resnet_mode=self.use_resnet_rms,
-                    resnet_no_add=False,
-                    num_resnet_processing_rms=0,
-                )
+                RefinementModule(semantic_input_channel_count=self.num_classes,
+                                 feature_encoder_input_channel_count=(self.use_feature_encoder * 3),
+                                 edge_map_input_channel_count=(self.use_feature_encoder * 1),
+                                 base_conv_channel_count=self.rms_conv_channel_settings[0], prior_conv_channel_count=0,
+                                 final_conv_output_channel_count=0, is_final_module=False,
+                                 input_height_width=self.input_tensor_size, norm_type=self.layer_norm_type,
+                                 num_prior_frames=0, num_resnet_processing_rms=0, resnet_mode=self.use_resnet_rms,
+                                 resnet_no_add=False)
             ]
         )
 
         self.rms_list.extend(
             [
-                RefinementModule(
-                    semantic_input_channel_count=self.num_classes,
-                    feature_encoder_input_channel_count=(self.use_feature_encoder * 3),
-                    edge_map_input_channel_count=(self.use_feature_encoder * 1),
-                    base_conv_channel_count=self.rms_conv_channel_settings[i],
-                    prior_conv_channel_count=self.rms_conv_channel_settings[i - 1],
-                    final_conv_output_channel_count=0,
-                    is_final_module=False,
-                    input_height_width=(2 ** (i + 2), 2 ** (i + 3)),
-                    norm_type=self.layer_norm_type,
-                    prev_frame_count=0,
-                    resnet_mode=self.use_resnet_rms,
-                    resnet_no_add=False,
-                    num_resnet_processing_rms=0,
-                )
+                RefinementModule(semantic_input_channel_count=self.num_classes,
+                                 feature_encoder_input_channel_count=(self.use_feature_encoder * 3),
+                                 edge_map_input_channel_count=(self.use_feature_encoder * 1),
+                                 base_conv_channel_count=self.rms_conv_channel_settings[i],
+                                 prior_conv_channel_count=self.rms_conv_channel_settings[i - 1],
+                                 final_conv_output_channel_count=0, is_final_module=False,
+                                 input_height_width=(2 ** (i + 2), 2 ** (i + 3)), norm_type=self.layer_norm_type,
+                                 num_prior_frames=0, num_resnet_processing_rms=0, resnet_mode=self.use_resnet_rms,
+                                 resnet_no_add=False)
                 for i in range(1, self.num_rms - 1)
             ]
         )
 
         self.rms_list.append(
-            RefinementModule(
-                semantic_input_channel_count=self.num_classes,
-                feature_encoder_input_channel_count=(self.use_feature_encoder * 3),
-                edge_map_input_channel_count=(self.use_feature_encoder * 1),
-                base_conv_channel_count=self.rms_conv_channel_settings[
-                    self.num_rms - 1
-                ],
-                prior_conv_channel_count=self.rms_conv_channel_settings[
+            RefinementModule(semantic_input_channel_count=self.num_classes,
+                             feature_encoder_input_channel_count=(self.use_feature_encoder * 3),
+                             edge_map_input_channel_count=(self.use_feature_encoder * 1),
+                             base_conv_channel_count=self.rms_conv_channel_settings[
+                                 self.num_rms - 1
+                                 ], prior_conv_channel_count=self.rms_conv_channel_settings[
                     self.num_rms - 2
-                ],
-                final_conv_output_channel_count=self.__NUM_OUTPUT_IMAGE_CHANNELS__
-                * self.num_output_images,
-                is_final_module=True,
-                input_height_width=final_image_size,
-                norm_type=self.layer_norm_type,
-                prev_frame_count=0,
-                resnet_mode=self.use_resnet_rms,
-                resnet_no_add=True,
-                num_resnet_processing_rms=self.num_resnet_processing_rms,
-            )
+                    ], final_conv_output_channel_count=self.__NUM_OUTPUT_IMAGE_CHANNELS__
+                                                       * self.num_output_images, is_final_module=True,
+                             input_height_width=final_image_size, norm_type=self.layer_norm_type, num_prior_frames=0,
+                             num_resnet_processing_rms=self.num_resnet_processing_rms, resnet_mode=self.use_resnet_rms,
+                             resnet_no_add=True)
         )
 
         if self.use_tanh:
@@ -124,17 +103,17 @@ class CRN(torch.nn.Module):
         self, msk: torch.Tensor, feature_encoding: torch.Tensor, edge_map: torch.Tensor
     ) -> torch.Tensor:
 
-        intermediate_output, out_img, _, _ = self.rms_list[0](msk, None, feature_encoding, edge_map)
+        output: dict = self.rms_list[0](msk, None, feature_encoding, edge_map)
         for i in range(1, len(self.rms_list)):
-            intermediate_output, out_img, _, _ = self.rms_list[i](msk, intermediate_output, feature_encoding, edge_map)
+            output = self.rms_list[i](msk, output["x"], feature_encoding, edge_map)
 
-        a, b, c = torch.chunk(out_img.unsqueeze(2), 3, 1)
-        output = torch.cat((a, b, c), 2)
+        a, b, c = torch.chunk(output["out_img"].unsqueeze(2), 3, 1)
+        output_gen = torch.cat((a, b, c), 2)
 
         # TanH for squeezing outputs to [-1, 1]
         if self.use_tanh:
-            output = self.tan_h(output).clone()
+            output_gen = self.tan_h(output_gen).clone()
 
         # Squeeze output to [0,1]
-        output = (output + 1.0) / 2.0
-        return output
+        output_gen = (output_gen + 1.0) / 2.0
+        return output_gen

@@ -17,19 +17,19 @@ class RefinementModule(nn.Module):
         is_final_module: bool,
         input_height_width: tuple,
         norm_type: str,
-        prev_frame_count: int,
+        num_prior_frames: int,
         num_resnet_processing_rms: int,
         resnet_mode: bool = False,
         resnet_no_add: bool = False,
         no_semantic_input: bool = False,
         no_image_input: bool = True,
-        is_flow_output: bool = False
+        is_flow_output: bool = False,
     ):
         super().__init__()
 
         self.input_height_width: tuple = input_height_width
         self.prior_conv_channel_count: int = prior_conv_channel_count
-        self.prev_frame_count: int = prev_frame_count
+        self.num_prior_frames: int = num_prior_frames
         self.resnet_mode: bool = resnet_mode
         self.resnet_no_add: bool = resnet_no_add
         self.num_resnet_processing_rms: int = num_resnet_processing_rms
@@ -42,11 +42,11 @@ class RefinementModule(nn.Module):
             + feature_encoder_input_channel_count
             + edge_map_input_channel_count
             + (prior_conv_channel_count if not resnet_mode else 0)
-            + (prev_frame_count * semantic_input_channel_count)
+            + (num_prior_frames * semantic_input_channel_count)
         )
 
         # Total number of input channels
-        self.total_image_input_channel_count: int = prev_frame_count * 3
+        self.total_image_input_channel_count: int = num_prior_frames * 3
 
         self.base_conv_channel_count: int = base_conv_channel_count
 
@@ -72,8 +72,8 @@ class RefinementModule(nn.Module):
             )
 
         if not self.no_image_input:
-            if self.prev_frame_count == 0:
-                raise ValueError("prev_frame_count is 0 but image input requested.")
+            if self.num_prior_frames == 0:
+                raise ValueError("num_prior_frames is 0 but image input requested.")
             self.rm_block_1_image = RMBlock(
                 self.base_conv_channel_count,
                 self.total_image_input_channel_count,
@@ -83,19 +83,18 @@ class RefinementModule(nn.Module):
                 num_conv_groups=1,
             )
 
+        if not self.is_first_module and (self.no_semantic_input or self.resnet_mode):
+            self.rm_block_1_resnet_adapter = RMBlock(
+                self.base_conv_channel_count,
+                self.prior_conv_channel_count,
+                self.input_height_width,
+                kernel_size=3,
+                norm_type=norm_type,
+                num_conv_groups=1,
+            )
+
         if resnet_mode:
-            # if (
-            #     self.prior_conv_channel_count != self.base_conv_channel_count
-            # ) and not self.is_first_module:
-            if not self.is_first_module:
-                self.rm_block_1_resnet_adapter = RMBlock(
-                    self.base_conv_channel_count,
-                    self.prior_conv_channel_count,
-                    self.input_height_width,
-                    kernel_size=3,
-                    norm_type=norm_type,
-                    num_conv_groups=1,
-                )
+
             self.resnet_block_1 = ResNetBlock(
                 self.base_conv_channel_count,
                 self.input_height_width,
@@ -145,6 +144,7 @@ class RefinementModule(nn.Module):
                     self.final_conv, init_type="xavier", zero_bias=True
                 )
 
+            if self.is_flow_output:
                 # Conv for generating optical flow
                 self.flow_conv_out: nn.Sequential = nn.Sequential(
                     nn.ReflectionPad2d(3),
@@ -237,7 +237,7 @@ class RefinementModule(nn.Module):
         #     and (self.prior_conv_channel_count != self.base_conv_channel_count)
         #     and not self.is_first_module
         # ):
-        if not self.is_first_module and self.resnet_mode:
+        if not self.is_first_module and (self.no_semantic_input or self.resnet_mode):
             x_prior_layers: torch.Tensor = self.rm_block_1_resnet_adapter(prior_layers)
             x = x_prior_layers + x if x is not None else x_prior_layers
 
@@ -272,7 +272,14 @@ class RefinementModule(nn.Module):
                 out_flow = self.flow_conv_out(x)
                 out_mask = self.mask_conv_out(x)
 
-        return x, out_img, out_flow, out_mask
+        output_dict: dict = {
+            "x": x,
+            "out_img": out_img,
+            "out_flow": out_flow,
+            "out_mask": out_mask,
+        }
+
+        return output_dict
 
 
 def interpolate_inputs(
