@@ -232,11 +232,6 @@ class RefinementModule(nn.Module):
             mask: torch.Tensor
             x = None
 
-        # if (
-        #     self.resnet_mode
-        #     and (self.prior_conv_channel_count != self.base_conv_channel_count)
-        #     and not self.is_first_module
-        # ):
         if not self.is_first_module and (self.no_semantic_input or self.resnet_mode):
             x_prior_layers: torch.Tensor = self.rm_block_1_resnet_adapter(prior_layers)
             x = x_prior_layers + x if x is not None else x_prior_layers
