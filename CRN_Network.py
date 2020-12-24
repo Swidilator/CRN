@@ -55,45 +55,66 @@ class CRN(torch.nn.Module):
 
         self.rms_list: nn.ModuleList = nn.ModuleList(
             [
-                RefinementModule(semantic_input_channel_count=self.num_classes,
-                                 feature_encoder_input_channel_count=(self.use_feature_encoder * 3),
-                                 edge_map_input_channel_count=(self.use_feature_encoder * 1),
-                                 base_conv_channel_count=self.rms_conv_channel_settings[0], prior_conv_channel_count=0,
-                                 final_conv_output_channel_count=0, is_final_module=False,
-                                 input_height_width=self.input_tensor_size, norm_type=self.layer_norm_type,
-                                 num_prior_frames=0, num_resnet_processing_rms=0, resnet_mode=self.use_resnet_rms,
-                                 resnet_no_add=False)
+                RefinementModule(
+                    semantic_input_channel_count=self.num_classes,
+                    feature_encoder_input_channel_count=(self.use_feature_encoder * 3),
+                    edge_map_input_channel_count=(self.use_feature_encoder * 1),
+                    base_conv_channel_count=self.rms_conv_channel_settings[0],
+                    prior_conv_channel_count=0,
+                    final_conv_output_channel_count=0,
+                    is_final_module=False,
+                    input_height_width=self.input_tensor_size,
+                    norm_type=self.layer_norm_type,
+                    num_prior_frames=0,
+                    num_resnet_processing_rms=0,
+                    resnet_mode=self.use_resnet_rms,
+                    resnet_no_add=False,
+                )
             ]
         )
 
         self.rms_list.extend(
             [
-                RefinementModule(semantic_input_channel_count=self.num_classes,
-                                 feature_encoder_input_channel_count=(self.use_feature_encoder * 3),
-                                 edge_map_input_channel_count=(self.use_feature_encoder * 1),
-                                 base_conv_channel_count=self.rms_conv_channel_settings[i],
-                                 prior_conv_channel_count=self.rms_conv_channel_settings[i - 1],
-                                 final_conv_output_channel_count=0, is_final_module=False,
-                                 input_height_width=(2 ** (i + 2), 2 ** (i + 3)), norm_type=self.layer_norm_type,
-                                 num_prior_frames=0, num_resnet_processing_rms=0, resnet_mode=self.use_resnet_rms,
-                                 resnet_no_add=False)
+                RefinementModule(
+                    semantic_input_channel_count=self.num_classes,
+                    feature_encoder_input_channel_count=(self.use_feature_encoder * 3),
+                    edge_map_input_channel_count=(self.use_feature_encoder * 1),
+                    base_conv_channel_count=self.rms_conv_channel_settings[i],
+                    prior_conv_channel_count=self.rms_conv_channel_settings[i - 1],
+                    final_conv_output_channel_count=0,
+                    is_final_module=False,
+                    input_height_width=(2 ** (i + 2), 2 ** (i + 3)),
+                    norm_type=self.layer_norm_type,
+                    num_prior_frames=0,
+                    num_resnet_processing_rms=0,
+                    resnet_mode=self.use_resnet_rms,
+                    resnet_no_add=False,
+                )
                 for i in range(1, self.num_rms - 1)
             ]
         )
 
         self.rms_list.append(
-            RefinementModule(semantic_input_channel_count=self.num_classes,
-                             feature_encoder_input_channel_count=(self.use_feature_encoder * 3),
-                             edge_map_input_channel_count=(self.use_feature_encoder * 1),
-                             base_conv_channel_count=self.rms_conv_channel_settings[
-                                 self.num_rms - 1
-                                 ], prior_conv_channel_count=self.rms_conv_channel_settings[
+            RefinementModule(
+                semantic_input_channel_count=self.num_classes,
+                feature_encoder_input_channel_count=(self.use_feature_encoder * 3),
+                edge_map_input_channel_count=(self.use_feature_encoder * 1),
+                base_conv_channel_count=self.rms_conv_channel_settings[
+                    self.num_rms - 1
+                ],
+                prior_conv_channel_count=self.rms_conv_channel_settings[
                     self.num_rms - 2
-                    ], final_conv_output_channel_count=self.__NUM_OUTPUT_IMAGE_CHANNELS__
-                                                       * self.num_output_images, is_final_module=True,
-                             input_height_width=final_image_size, norm_type=self.layer_norm_type, num_prior_frames=0,
-                             num_resnet_processing_rms=self.num_resnet_processing_rms, resnet_mode=self.use_resnet_rms,
-                             resnet_no_add=True)
+                ],
+                final_conv_output_channel_count=self.__NUM_OUTPUT_IMAGE_CHANNELS__
+                * self.num_output_images,
+                is_final_module=True,
+                input_height_width=final_image_size,
+                norm_type=self.layer_norm_type,
+                num_prior_frames=0,
+                num_resnet_processing_rms=self.num_resnet_processing_rms,
+                resnet_mode=self.use_resnet_rms,
+                resnet_no_add=True,
+            )
         )
 
         if self.use_tanh:
