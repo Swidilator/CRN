@@ -20,12 +20,13 @@ from support_scripts.utils import (
     MastersModel,
     ModelSettingsManager,
     CityScapesDemoVideoDataset,
+    CityScapesVideoDataset
 )
-from support_scripts.utils.datasets.custom_video_datasets import CityScapesVideoDataset2
 
 ImageFile.LOAD_TRUNCATED_IMAGES = True
 
 
+# noinspection PyUnresolvedReferences
 class CRNVideoFramework(MastersModel):
     def __init__(
         self,
@@ -158,7 +159,7 @@ class CRNVideoFramework(MastersModel):
 
     def __set_data_loader__(self, **kwargs):
 
-        self.__data_set_train__ = CityScapesVideoDataset2(
+        self.__data_set_train__ = CityScapesVideoDataset(
             root=self.dataset_path + "/sequence",
             split="train",
             should_flip=False,
@@ -178,7 +179,7 @@ class CRNVideoFramework(MastersModel):
             )
         )
 
-        self.__data_set_val__ = CityScapesVideoDataset2(
+        self.__data_set_val__ = CityScapesVideoDataset(
             root=self.dataset_path + "/sequence",
             split="val",
             should_flip=False,
@@ -205,7 +206,6 @@ class CRNVideoFramework(MastersModel):
             noise=False,
             specific_model="CRN",
             num_frames=16,
-            use_all_classes=True,  # Since it only contains the correct amount of classes in the dataset
         )
 
         self.data_loader_video: torch.utils.data.DataLoader = (

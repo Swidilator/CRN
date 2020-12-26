@@ -22,7 +22,7 @@ class CRNVideo(torch.nn.Module):
         num_resnet_processing_rms: int,
         num_prior_frames: int,
         use_optical_flow: bool,
-        use_edge_map: bool
+        use_edge_map: bool,
     ):
         super(CRNVideo, self).__init__()
 

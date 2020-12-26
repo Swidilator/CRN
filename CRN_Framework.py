@@ -163,7 +163,7 @@ class CRNFramework(MastersModel):
             subset_size=self.training_subset_size,
             noise=self.use_input_image_noise,
             specific_model="CRN",
-            use_all_classes=self.use_all_classes,
+            generated_data=False,
         )
 
         self.data_loader_train: torch.utils.data.DataLoader = (
@@ -184,7 +184,7 @@ class CRNFramework(MastersModel):
             subset_size=0,
             noise=False,
             specific_model="CRN",
-            use_all_classes=self.use_all_classes,
+            generated_data=False,
         )
 
         self.data_loader_val: torch.utils.data.DataLoader = torch.utils.data.DataLoader(
@@ -202,7 +202,7 @@ class CRNFramework(MastersModel):
             subset_size=0,
             noise=False,
             specific_model="CRN",
-            use_all_classes=True,  # Since it only contains the correct amount of classes in the dataset
+            generated_data=True,
         )
 
         self.data_loader_video: torch.utils.data.DataLoader = (
