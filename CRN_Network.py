@@ -71,6 +71,10 @@ class CRN(torch.nn.Module):
                     num_resnet_processing_rms=0,
                     resnet_mode=self.use_resnet_rms,
                     resnet_no_add=False,
+                    is_twin_model=False,
+                    is_flow_output=False,
+                    use_image_input=False,
+                    use_semantic_input=True
                 )
             ]
         )
@@ -91,6 +95,10 @@ class CRN(torch.nn.Module):
                     num_resnet_processing_rms=0,
                     resnet_mode=self.use_resnet_rms,
                     resnet_no_add=False,
+                    is_twin_model=False,
+                    is_flow_output=False,
+                    use_image_input=False,
+                    use_semantic_input=True
                 )
                 for i in range(1, self.num_rms - 1)
             ]
@@ -116,6 +124,10 @@ class CRN(torch.nn.Module):
                 num_resnet_processing_rms=self.num_resnet_processing_rms,
                 resnet_mode=self.use_resnet_rms,
                 resnet_no_add=True,
+                is_twin_model=False,
+                is_flow_output=False,
+                use_image_input=False,
+                use_semantic_input=True
             )
         )
 

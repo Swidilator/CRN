@@ -90,6 +90,7 @@ class CRNVideoFramework(MastersModel):
             assert "flownet_save_path" in kwargs
             assert "num_resnet_processing_rms" in kwargs
             assert "use_edge_map" in kwargs
+            assert "use_twin_network" in kwargs
         except AssertionError as e:
             print("Missing argument: {error}".format(error=e))
             raise SystemExit
@@ -107,6 +108,7 @@ class CRNVideoFramework(MastersModel):
         self.flownet_save_path: str = kwargs["flownet_save_path"]  # This is in args
         self.num_resnet_processing_rms: int = kwargs["num_resnet_processing_rms"]
         self.use_edge_map: bool = kwargs["use_edge_map"]
+        self.use_twin_network: bool = kwargs["use_twin_network"]
         # fmt: on
 
         self.__set_data_loader__()
@@ -152,6 +154,7 @@ class CRNVideoFramework(MastersModel):
             "use_resnet_rms": manager.model_conf["CRN_USE_RESNET_RMS"],
             "num_resnet_processing_rms": manager.model_conf["CRN_NUM_RESNET_PROCESSING_RMS"],
             "use_edge_map": manager.model_conf["CRN_USE_EDGE_MAP"],
+            "use_twin_network": manager.model_conf["CRN_USE_TWIN_NETWORK"],
         }
         # fmt: on
 
@@ -255,7 +258,9 @@ class CRNVideoFramework(MastersModel):
             num_prior_frames=self.num_prior_frames,
             use_optical_flow=self.use_optical_flow,
             use_edge_map=self.use_edge_map,
+            use_twin_network=self.use_twin_network
         )
+        print(self.crn_video)
 
         # self.crn_video = nn.DataParallel(self.crn_video, device_ids=device_ids)
         self.crn_video = self.crn_video.to(self.device)
@@ -316,6 +321,11 @@ class CRNVideoFramework(MastersModel):
 
     def save_model(self, epoch: int = -1) -> None:
         super().save_model()
+        network: torch.nn.Module
+
+        for network in self.wandb_trainable_model:
+            network.eval()
+            network.zero_grad()
 
         try:
             assert not self.sample_only

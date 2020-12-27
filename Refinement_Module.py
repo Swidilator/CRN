@@ -19,11 +19,12 @@ class RefinementModule(nn.Module):
         norm_type: str,
         num_prior_frames: int,
         num_resnet_processing_rms: int,
-        resnet_mode: bool = False,
-        resnet_no_add: bool = False,
-        no_semantic_input: bool = False,
-        no_image_input: bool = True,
-        is_flow_output: bool = False,
+        resnet_mode: bool,
+        resnet_no_add: bool,
+        use_semantic_input: bool,
+        use_image_input: bool,
+        is_flow_output: bool,
+        is_twin_model: bool
     ):
         super().__init__()
 
@@ -33,31 +34,32 @@ class RefinementModule(nn.Module):
         self.resnet_mode: bool = resnet_mode
         self.resnet_no_add: bool = resnet_no_add
         self.num_resnet_processing_rms: int = num_resnet_processing_rms
-        self.no_semantic_input: bool = no_semantic_input
-        self.no_image_input: bool = no_image_input
-
-        # Total number of input channels
-        self.total_semantic_input_channel_count: int = (
-            semantic_input_channel_count
-            + feature_encoder_input_channel_count
-            + edge_map_input_channel_count
-            + (prior_conv_channel_count if not resnet_mode else 0)
-            + (num_prior_frames * semantic_input_channel_count)
-        )
+        self.use_semantic_input: bool = use_semantic_input
+        self.use_image_input: bool = use_image_input
+        self.is_twin_model: bool = is_twin_model
+        self.is_flow_output: bool = is_flow_output
+        self.is_final_module: bool = is_final_module
+        self.base_conv_channel_count: int = base_conv_channel_count
 
         # Total number of input channels
         self.total_image_input_channel_count: int = num_prior_frames * 3
-
-        self.base_conv_channel_count: int = base_conv_channel_count
-
         self.final_conv_output_channel_count: int = final_conv_output_channel_count
         self.use_feature_encoder: int = feature_encoder_input_channel_count > 0
-        self.is_final_module: bool = is_final_module
+
         self.is_first_module: bool = self.prior_conv_channel_count == 0
 
-        self.is_flow_output: bool = is_flow_output
+        self.complex_input_mode: bool = self.is_twin_model or self.resnet_mode
 
-        if not self.no_semantic_input:
+        # Total number of input channels
+        self.total_semantic_input_channel_count: int = (
+                (semantic_input_channel_count * (num_prior_frames + 1))
+                + feature_encoder_input_channel_count
+                + edge_map_input_channel_count
+                + (prior_conv_channel_count if not self.complex_input_mode else 0)
+                + (self.total_image_input_channel_count if not self.complex_input_mode else 0)
+        )
+
+        if self.use_semantic_input:
             if self.total_semantic_input_channel_count == 0:
                 raise ValueError(
                     "total_semantic_input_channel_count is 0 but semantic input is required."
@@ -71,7 +73,7 @@ class RefinementModule(nn.Module):
                 num_conv_groups=1,
             )
 
-        if not self.no_image_input:
+        if self.use_image_input and self.complex_input_mode:
             if self.num_prior_frames == 0:
                 raise ValueError("num_prior_frames is 0 but image input requested.")
             self.rm_block_1_image = RMBlock(
@@ -83,8 +85,8 @@ class RefinementModule(nn.Module):
                 num_conv_groups=1,
             )
 
-        if not self.is_first_module and (self.no_semantic_input or self.resnet_mode):
-            self.rm_block_1_resnet_adapter = RMBlock(
+        if not self.is_first_module and self.complex_input_mode:
+            self.rm_block_1_prior_layer = RMBlock(
                 self.base_conv_channel_count,
                 self.prior_conv_channel_count,
                 self.input_height_width,
@@ -93,8 +95,26 @@ class RefinementModule(nn.Module):
                 num_conv_groups=1,
             )
 
-        if resnet_mode:
+        if not resnet_mode:
+            self.rm_block_2 = RMBlock(
+                self.base_conv_channel_count,
+                self.base_conv_channel_count,
+                self.input_height_width,
+                kernel_size=3,
+                norm_type=norm_type,
+                num_conv_groups=1,
+            )
+            if self.complex_input_mode:
+                self.rm_block_3 = RMBlock(
+                    self.base_conv_channel_count,
+                    self.base_conv_channel_count,
+                    self.input_height_width,
+                    kernel_size=3,
+                    norm_type=norm_type,
+                    num_conv_groups=1,
+                )
 
+        else:
             self.resnet_block_1 = ResNetBlock(
                 self.base_conv_channel_count,
                 self.input_height_width,
@@ -104,16 +124,6 @@ class RefinementModule(nn.Module):
                 self.base_conv_channel_count,
                 self.input_height_width,
                 self.resnet_no_add,
-            )
-
-        else:
-            self.rm_block_2 = RMBlock(
-                self.base_conv_channel_count,
-                self.base_conv_channel_count,
-                self.input_height_width,
-                kernel_size=3,
-                norm_type=norm_type,
-                num_conv_groups=1,
             )
 
         if self.is_final_module:
@@ -169,7 +179,7 @@ class RefinementModule(nn.Module):
                 )
 
         # Compatibility with old saves, resnet does not have compat
-        if not self.resnet_mode and not self.no_semantic_input:
+        if not self.resnet_mode and self.use_semantic_input:
             self.conv_1 = self.rm_block_1_semantic.conv_1
             self.norm_1 = self.rm_block_1_semantic.norm_1
             self.conv_2 = self.rm_block_2.conv_1
@@ -205,8 +215,8 @@ class RefinementModule(nn.Module):
         ) = interpolate_inputs(self.input_height_width, inputs)
 
         # Process semantic input
-        if not self.no_semantic_input:
-            if not self.resnet_mode:
+        if self.use_semantic_input:
+            if not self.complex_input_mode:
                 # Concatenate semantic inputs together for use in semantic entry conv
                 x_semantic_input: list = [
                     x
@@ -216,6 +226,7 @@ class RefinementModule(nn.Module):
                         feature_selection,
                         edge_map,
                         prev_masks,
+                        prev_frames,
                     )
                     if x is not None
                 ]
@@ -232,18 +243,20 @@ class RefinementModule(nn.Module):
             mask: torch.Tensor
             x = None
 
-        if not self.is_first_module and (self.no_semantic_input or self.resnet_mode):
-            x_prior_layers: torch.Tensor = self.rm_block_1_resnet_adapter(prior_layers)
+        if not self.is_first_module and self.complex_input_mode:
+            x_prior_layers: torch.Tensor = self.rm_block_1_prior_layer(prior_layers)
             x = x_prior_layers + x if x is not None else x_prior_layers
 
         # If previous frames are present, then pass them into the image entry conv and add them to the semantic output
-        if not self.no_image_input:
+        if self.use_image_input and self.complex_input_mode:
             x_image: torch.Tensor = self.rm_block_1_image(prev_frames, relu_loc="after")
             x = x_image + x if x is not None else x_image
 
         if not self.resnet_mode:
             # Continue as normal
             x = self.rm_block_2(x, relu_loc="after")
+            if self.complex_input_mode:
+                x = self.rm_block_3(x, relu_loc="after")
         else:
             x = self.resnet_block_1(x)
             x = self.resnet_block_2(x)
