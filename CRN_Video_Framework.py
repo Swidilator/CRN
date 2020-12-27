@@ -20,7 +20,7 @@ from support_scripts.utils import (
     MastersModel,
     ModelSettingsManager,
     CityScapesDemoVideoDataset,
-    CityScapesVideoDataset
+    CityScapesVideoDataset,
 )
 
 ImageFile.LOAD_TRUNCATED_IMAGES = True
@@ -230,6 +230,8 @@ class CRNVideoFramework(MastersModel):
                 self.device,
                 self.model_save_dir,
                 self.use_saved_feature_encodings,
+                use_masks_as_instances=True,
+                num_semantic_classes=self.num_classes,
             )
             self.feature_encoder = self.feature_encoder.to(self.device)
             if self.use_saved_feature_encodings:
@@ -252,7 +254,7 @@ class CRNVideoFramework(MastersModel):
             num_resnet_processing_rms=self.num_resnet_processing_rms,
             num_prior_frames=self.num_prior_frames,
             use_optical_flow=self.use_optical_flow,
-            use_edge_map=self.use_edge_map
+            use_edge_map=self.use_edge_map,
         )
 
         # self.crn_video = nn.DataParallel(self.crn_video, device_ids=device_ids)
@@ -371,6 +373,10 @@ class CRNVideoFramework(MastersModel):
 
     def train(self, **kwargs) -> Tuple[float, Any]:
         self.crn_video.train()
+        # If sampling from saved feature encodings, and using a single set of settings
+        #  all sampling for a single epoch will have the same settings, but refresh between epochs
+        if self.use_feature_encodings and self.use_saved_feature_encodings:
+            self.feature_encoder.feature_extractions_sampler.update_single_setting_class_list()
 
         current_epoch: int = kwargs["current_epoch"]
 
@@ -391,10 +397,10 @@ class CRNVideoFramework(MastersModel):
 
             # prev_image: torch.Tensor = torch.zeros_like(input_dict["img"][:,0]).to(self.device)
             prior_image_list: list = [
-                torch.zeros_like(input_dict["img"][:, 0]).to(self.device)
+                torch.zeros_like(input_dict["img"][:, 0], device=self.device)
             ] * self.num_prior_frames
             prior_msk_list: list = [
-                torch.zeros_like(input_dict["msk"][:, 0]).to(self.device)
+                torch.zeros_like(input_dict["msk"][:, 0], device=self.device)
             ] * self.num_prior_frames
 
             if self.num_prior_frames > 0:
@@ -409,7 +415,7 @@ class CRNVideoFramework(MastersModel):
             video_loss_flow: float = 0.0
             video_loss_warp: float = 0.0
 
-            for i in range(1, num_frames):
+            for i in range((self.prior_frame_seed_type == "real"), num_frames):
                 self.crn_video.zero_grad()
 
                 real_img: torch.Tensor = input_dict["img"][:, i].to(self.device)
@@ -427,6 +433,7 @@ class CRNVideoFramework(MastersModel):
                             if self.use_saved_feature_encodings
                             else None,
                             input_dict["img_flipped"],
+                            msk,
                         )
                     else:
                         feature_encoding = None
@@ -460,9 +467,9 @@ class CRNVideoFramework(MastersModel):
                     for b in range(fake_img.shape[0]):
                         fake_img_normalised[b] = self.normalise(fake_img[b].clone())
 
-                    loss_warp = torch.zeros(1).to(self.device)
-                    loss_flow = torch.zeros(1).to(self.device)
-                    loss_img_h = torch.zeros(1).to(self.device)
+                    loss_warp = torch.zeros(1, device=self.device)
+                    loss_flow = torch.zeros(1, device=self.device)
+                    loss_img_h = torch.zeros(1, device=self.device)
                     # Previous outputs stored for input later
                     if self.num_prior_frames > 0:
 
@@ -632,10 +639,10 @@ class CRNVideoFramework(MastersModel):
                     )
 
             prior_image_list: list = [
-                torch.zeros_like(original_img_total[:, 0]).to(self.device)
+                torch.zeros_like(original_img_total[:, 0], device=self.device)
             ] * self.num_prior_frames
             prior_msk_list: list = [
-                torch.zeros_like(msk_total[:, 0]).to(self.device)
+                torch.zeros_like(msk_total[:, 0], device=self.device)
             ] * self.num_prior_frames
 
             if self.num_prior_frames > 0:
@@ -653,7 +660,9 @@ class CRNVideoFramework(MastersModel):
             output_flow_list: list = []
             reference_flow_list: list = []
 
-            for frame_no in range(1, self.num_frames_per_video):
+            for frame_no in range(
+                (self.prior_frame_seed_type == "real"), self.num_frames_per_video
+            ):
                 self.crn_video.zero_grad()
 
                 real_img: torch.Tensor = original_img_total[:, frame_no]
@@ -668,10 +677,12 @@ class CRNVideoFramework(MastersModel):
                 if self.use_feature_encodings:
                     if self.use_saved_feature_encodings:
                         feature_encoding = self.feature_encoder.sample_using_means(
-                            instance, msk
+                            instance, msk, fixed_class_lists=True
                         )
                     else:
-                        feature_encoding = self.feature_encoder(real_img, instance)
+                        feature_encoding = self.feature_encoder(
+                            real_img, instance, mask=msk
+                        )
                 else:
                     feature_encoding = None
 

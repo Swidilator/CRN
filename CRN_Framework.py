@@ -539,7 +539,9 @@ class CRNFramework(MastersModel):
                 feature_encoding_total = None
 
             img_out_total: torch.Tensor = self.crn(
-                msk_total, feature_encoding_total, edge_map_total if self.use_edge_map else None
+                msk_total,
+                feature_encoding_total,
+                edge_map_total if self.use_edge_map else None,
             )
 
             # Clamp image to within correct bounds
