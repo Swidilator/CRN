@@ -276,7 +276,7 @@ class CRNVideoFramework(MastersModel):
                 self.discriminator: FullDiscriminator = FullDiscriminator(
                     self.device,
                     self.num_classes,
-                    2,
+                    1,
                     False,
                     self.use_edge_map,
                 )
@@ -458,7 +458,6 @@ class CRNVideoFramework(MastersModel):
             video_loss_flow: float = 0.0
             video_loss_warp: float = 0.0
 
-
             video_loss_d: float = 0.0
             video_loss_g: float = 0.0
             video_loss_g_fm: float = 0.0
@@ -540,7 +539,7 @@ class CRNVideoFramework(MastersModel):
                             output_d_real_extra,
                             output_g_extra,
                             10,
-                            2,
+                            1,
                         )
 
                         # Prepare for backwards pass
