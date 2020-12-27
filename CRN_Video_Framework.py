@@ -363,6 +363,10 @@ class CRNVideoFramework(MastersModel):
             save_dict.update(
                 {"dict_encoder_decoder": self.feature_encoder.state_dict()}
             )
+        if self.use_discriminators:
+            save_dict.update(
+                {"dict_discriminator": self.discriminator.state_dict()}
+            )
 
         if epoch >= 0:
             # Todo add support for manager.args["model_save_prefix"]
@@ -389,6 +393,8 @@ class CRNVideoFramework(MastersModel):
         self.crn_video.load_state_dict(checkpoint["dict_crn"], strict=False)
         if self.use_feature_encodings:
             self.feature_encoder.load_state_dict(checkpoint["dict_encoder_decoder"])
+        if self.use_discriminators:
+            self.discriminator.load_state_dict(checkpoint["dict_discriminator"])
 
     @classmethod
     def load_model_with_embedded_settings(cls, manager: ModelSettingsManager):
