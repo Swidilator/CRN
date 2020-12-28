@@ -1,5 +1,4 @@
 import os
-import sys
 from contextlib import nullcontext
 from itertools import chain
 from typing import Tuple, Any, Union, Optional, List
@@ -14,7 +13,7 @@ import flowiz as fz
 
 from CRN.CRN_Video_Network import CRNVideo
 from CRN.Perceptual_Loss import PerceptualLossNetwork
-from support_scripts.components import FeatureEncoder, FlowNetWrapper
+from support_scripts.components import FeatureEncoder, FlowNetWrapper, FullDiscriminator, feature_matching_error
 from support_scripts.sampling import SampleDataHolder
 from support_scripts.utils import (
     MastersModel,
@@ -22,8 +21,6 @@ from support_scripts.utils import (
     CityScapesDemoVideoDataset,
     CityScapesVideoDataset,
 )
-
-from GAN.Discriminator import FullDiscriminator, feature_matching_error
 
 ImageFile.LOAD_TRUNCATED_IMAGES = True
 
