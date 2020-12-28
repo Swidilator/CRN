@@ -13,7 +13,12 @@ import flowiz as fz
 
 from CRN.CRN_Video_Network import CRNVideo
 from CRN.Perceptual_Loss import PerceptualLossNetwork
-from support_scripts.components import FeatureEncoder, FlowNetWrapper, FullDiscriminator, feature_matching_error
+from support_scripts.components import (
+    FeatureEncoder,
+    FlowNetWrapper,
+    FullDiscriminator,
+    feature_matching_error,
+)
 from support_scripts.sampling import SampleDataHolder
 from support_scripts.utils import (
     MastersModel,
@@ -25,7 +30,6 @@ from support_scripts.utils import (
 ImageFile.LOAD_TRUNCATED_IMAGES = True
 
 
-# noinspection PyUnresolvedReferences
 class CRNVideoFramework(MastersModel):
     def __init__(
         self,
@@ -91,6 +95,8 @@ class CRNVideoFramework(MastersModel):
             assert "use_edge_map" in kwargs
             assert "use_twin_network" in kwargs
             assert "use_discriminators" in kwargs
+            assert "use_sigmoid_discriminator" in kwargs
+            assert "num_discriminators" in kwargs
 
         except AssertionError as e:
             print("Missing argument: {error}".format(error=e))
@@ -111,6 +117,8 @@ class CRNVideoFramework(MastersModel):
         self.use_edge_map: bool = kwargs["use_edge_map"]
         self.use_twin_network: bool = kwargs["use_twin_network"]
         self.use_discriminators: bool = kwargs["use_discriminators"]
+        self.use_sigmoid_discriminator: bool = kwargs["use_sigmoid_discriminator"]
+        self.num_discriminators: int = kwargs["num_discriminators"]
         # fmt: on
 
         self.__set_data_loader__()
@@ -158,6 +166,8 @@ class CRNVideoFramework(MastersModel):
             "use_edge_map": manager.model_conf["CRN_USE_EDGE_MAP"],
             "use_twin_network": manager.model_conf["CRN_USE_TWIN_NETWORK"],
             "use_discriminators": manager.model_conf["CRN_USE_DISCRIMINATORS"],
+            "use_sigmoid_discriminator": manager.model_conf["CRN_USE_SIGMOID_DISCRIMINATOR"],
+            "num_discriminators": manager.model_conf["CRN_NUM_DISCRIMINATORS"],
         }
         # fmt: on
 
@@ -227,11 +237,16 @@ class CRNVideoFramework(MastersModel):
         self.num_classes = self.__data_set_train__.num_output_segmentation_classes
 
     def __set_model__(self, **kwargs) -> None:
+        # Useful channel count variables
+        num_image_channels: int = 3
+        num_edge_map_channels: int = self.use_edge_map * 1
+        num_feature_encoding_channels: int = self.use_feature_encodings * 3
+
         # Feature Encoder
         if self.use_feature_encodings:
             self.feature_encoder: FeatureEncoder = FeatureEncoder(
-                3,
-                3,
+                num_image_channels,
+                num_feature_encoding_channels,
                 4,
                 self.device,
                 self.model_save_dir,
@@ -261,7 +276,7 @@ class CRNVideoFramework(MastersModel):
             num_prior_frames=self.num_prior_frames,
             use_optical_flow=self.use_optical_flow,
             use_edge_map=self.use_edge_map,
-            use_twin_network=self.use_twin_network
+            use_twin_network=self.use_twin_network,
         )
         print(self.crn_video)
 
@@ -269,18 +284,24 @@ class CRNVideoFramework(MastersModel):
         self.crn_video = self.crn_video.to(self.device)
 
         if not self.sample_only:
+            self.discriminator_input_channel_count: int = (
+                self.num_classes
+                + num_edge_map_channels
+                + num_image_channels
+                + (self.num_prior_frames * (self.num_classes + num_image_channels))
+            )
+
             if self.use_discriminators:
-                self.discriminator: FullDiscriminator = FullDiscriminator(
+                self.image_discriminator: FullDiscriminator = FullDiscriminator(
                     self.device,
-                    self.num_classes,
-                    1,
-                    False,
-                    self.use_edge_map,
+                    self.discriminator_input_channel_count,
+                    self.num_discriminators,
+                    self.use_sigmoid_discriminator,
                 )
-                self.discriminator = self.discriminator.to(self.device)
+                self.image_discriminator = self.image_discriminator.to(self.device)
 
                 self.optimizer_D: torch.optim.Adam = torch.optim.Adam(
-                    self.discriminator.parameters(),
+                    self.image_discriminator.parameters(),
                     lr=0.0001,
                     betas=(0.5, 0.999),
                     # eps=1e-08,
@@ -362,7 +383,7 @@ class CRNVideoFramework(MastersModel):
             )
         if self.use_discriminators:
             save_dict.update(
-                {"dict_discriminator": self.discriminator.state_dict()}
+                {"dict_discriminator": self.image_discriminator.state_dict()}
             )
 
         if epoch >= 0:
@@ -391,7 +412,7 @@ class CRNVideoFramework(MastersModel):
         if self.use_feature_encodings:
             self.feature_encoder.load_state_dict(checkpoint["dict_encoder_decoder"])
         if self.use_discriminators:
-            self.discriminator.load_state_dict(checkpoint["dict_discriminator"])
+            self.image_discriminator.load_state_dict(checkpoint["dict_discriminator"])
 
     @classmethod
     def load_model_with_embedded_settings(cls, manager: ModelSettingsManager):
@@ -436,7 +457,10 @@ class CRNVideoFramework(MastersModel):
                 break
 
             # prev_image: torch.Tensor = torch.zeros_like(input_dict["img"][:,0]).to(self.device)
-            prior_image_list: list = [
+            prior_fake_image_list: list = [
+                torch.zeros_like(input_dict["img"][:, 0], device=self.device)
+            ] * self.num_prior_frames
+            prior_real_image_list: list = [
                 torch.zeros_like(input_dict["img"][:, 0], device=self.device)
             ] * self.num_prior_frames
             prior_msk_list: list = [
@@ -445,7 +469,7 @@ class CRNVideoFramework(MastersModel):
 
             if self.num_prior_frames > 0:
                 if self.prior_frame_seed_type == "real":
-                    prior_image_list[0] = input_dict["img"][:, 0].to(self.device)
+                    prior_fake_image_list[0] = input_dict["img"][:, 0].to(self.device)
                     prior_msk_list[0] = input_dict["msk"][:, 0].to(self.device)
 
             # Loss holders
@@ -466,7 +490,7 @@ class CRNVideoFramework(MastersModel):
             for i in range(skip_first_frame, num_frames):
                 self.crn_video.zero_grad()
                 if self.use_discriminators:
-                    self.discriminator.zero_grad()
+                    self.image_discriminator.zero_grad()
 
                 real_img: torch.Tensor = input_dict["img"][:, i].to(self.device)
                 msk: torch.Tensor = input_dict["msk"][:, i].to(self.device)
@@ -500,7 +524,7 @@ class CRNVideoFramework(MastersModel):
                         msk,
                         feature_encoding,
                         edge_map if self.use_edge_map else None,
-                        torch.cat(prior_image_list, dim=1)
+                        torch.cat(prior_fake_image_list, dim=1)
                         if self.num_prior_frames > 0
                         else None,
                         torch.cat(prior_msk_list, dim=1)
@@ -511,24 +535,44 @@ class CRNVideoFramework(MastersModel):
                     if self.use_discriminators:
                         # Discriminator
                         output_d_fake: torch.Tensor
-                        output_d_fake, _ = self.discriminator(
-                            (msk, edge_map if self.use_edge_map else None, fake_img.detach())
+                        output_d_fake, _ = self.image_discriminator(
+                            (
+                                msk,
+                                edge_map if self.use_edge_map else None,
+                                fake_img.detach(),
+                                *prior_fake_image_list,
+                                *prior_msk_list,
+                            )
                         )
-                        loss_d_fake = self.discriminator.calculate_loss(
+                        loss_d_fake = self.image_discriminator.calculate_loss(
                             output_d_fake, fake_label, self.criterion_D
                         )
 
                         output_d_real: torch.Tensor
-                        output_d_real, output_d_real_extra = self.discriminator(
-                            (msk, edge_map if self.use_edge_map else None, real_img)
+                        output_d_real, output_d_real_extra = self.image_discriminator(
+                            (
+                                msk,
+                                edge_map if self.use_edge_map else None,
+                                real_img,
+                                *prior_real_image_list,
+                                *prior_msk_list,
+                            )
                         )
-                        loss_d_real = self.discriminator.calculate_loss(
+                        loss_d_real = self.image_discriminator.calculate_loss(
                             output_d_real, real_label, self.criterion_D
                         )
 
                         # Generator
-                        output_g, output_g_extra = self.discriminator((msk, edge_map, fake_img))
-                        loss_g_gan = self.discriminator.calculate_loss(
+                        output_g, output_g_extra = self.image_discriminator(
+                            (
+                                msk,
+                                edge_map,
+                                fake_img,
+                                *prior_fake_image_list,
+                                *prior_msk_list,
+                            )
+                        )
+                        loss_g_gan = self.image_discriminator.calculate_loss(
                             output_g, real_label_gan, self.criterion_D
                         )
 
@@ -561,9 +605,13 @@ class CRNVideoFramework(MastersModel):
                     # Previous outputs stored for input later
                     if self.num_prior_frames > 0:
 
-                        prior_image_list = [
+                        prior_fake_image_list = [
                             fake_img.detach().clone().clamp(0.0, 1.0),
-                            *prior_image_list[1 : self.num_prior_frames],
+                            *prior_fake_image_list[1 : self.num_prior_frames],
+                        ]
+                        prior_real_image_list = [
+                            real_img.detach().clone(),
+                            *prior_real_image_list[1 : self.num_prior_frames],
                         ]
                         prior_msk_list = [
                             msk.detach(),
@@ -597,7 +645,7 @@ class CRNVideoFramework(MastersModel):
                             # Warp prior reference image and compare to warped prior image
                             warped_real_prev_image: torch.Tensor = (
                                 FlowNetWrapper.resample(
-                                    prior_image_list[1].detach(),
+                                    prior_fake_image_list[1].detach(),
                                     fake_flow,
                                     self.crn_video.grid,
                                 )
@@ -625,7 +673,9 @@ class CRNVideoFramework(MastersModel):
                     )
 
                     # Add losses together
-                    loss: torch.Tensor = loss_img + loss_img_h + loss_warp + loss_flow + loss_g
+                    loss: torch.Tensor = (
+                        loss_img + loss_img_h + loss_warp + loss_flow + loss_g
+                    )
 
                 if self.use_amp == "torch":
                     self.optimizer.zero_grad()
@@ -637,7 +687,9 @@ class CRNVideoFramework(MastersModel):
                     if self.use_discriminators:
                         self.optimizer_D.zero_grad()
                         self.torch_gradient_scaler.scale(loss_d).backward()
-                        torch.nn.utils.clip_grad_norm_(self.discriminator.parameters(), 10)
+                        torch.nn.utils.clip_grad_norm_(
+                            self.image_discriminator.parameters(), 10
+                        )
                         self.torch_gradient_scaler.step(self.optimizer_D)
                         self.torch_gradient_scaler.update()
                 else:
@@ -650,20 +702,54 @@ class CRNVideoFramework(MastersModel):
                         loss_d.backward()
                         self.optimizer_D.step()
 
-                loss_total += loss.item() * self.batch_size / (num_frames - skip_first_frame)
-                video_loss += loss.item() * self.batch_size / (num_frames - skip_first_frame)
+                loss_total += (
+                    loss.item() * self.batch_size / (num_frames - skip_first_frame)
+                )
+                video_loss += (
+                    loss.item() * self.batch_size / (num_frames - skip_first_frame)
+                )
 
-                video_loss_img += loss_img.item() * self.batch_size / (num_frames - skip_first_frame)
-                video_loss_h += loss_img_h.item() * self.batch_size / (num_frames - skip_first_frame)
-                video_loss_flow += loss_flow.item() * self.batch_size / (num_frames - skip_first_frame)
-                video_loss_warp += loss_warp.item() * self.batch_size / (num_frames - skip_first_frame)
+                video_loss_img += (
+                    loss_img.item() * self.batch_size / (num_frames - skip_first_frame)
+                )
+                video_loss_h += (
+                    loss_img_h.item()
+                    * self.batch_size
+                    / (num_frames - skip_first_frame)
+                )
+                video_loss_flow += (
+                    loss_flow.item() * self.batch_size / (num_frames - skip_first_frame)
+                )
+                video_loss_warp += (
+                    loss_warp.item() * self.batch_size / (num_frames - skip_first_frame)
+                )
 
                 if self.use_discriminators:
-                    video_loss_d += loss_d.item() * self.batch_size / (num_frames - skip_first_frame)
-                    video_loss_g += loss_g.item() * self.batch_size / (num_frames - skip_first_frame)
-                    video_loss_g_fm += loss_g_fm.item() * self.batch_size / (num_frames - skip_first_frame)
-                    video_output_d_real_mean += output_d_real.mean().item() * self.batch_size / (num_frames - skip_first_frame)
-                    video_output_d_fake_mean += output_d_fake.mean().item() * self.batch_size / (num_frames - skip_first_frame)
+                    video_loss_d += (
+                        loss_d.item()
+                        * self.batch_size
+                        / (num_frames - skip_first_frame)
+                    )
+                    video_loss_g += (
+                        loss_g.item()
+                        * self.batch_size
+                        / (num_frames - skip_first_frame)
+                    )
+                    video_loss_g_fm += (
+                        loss_g_fm.item()
+                        * self.batch_size
+                        / (num_frames - skip_first_frame)
+                    )
+                    video_output_d_real_mean += (
+                        output_d_real.mean().item()
+                        * self.batch_size
+                        / (num_frames - skip_first_frame)
+                    )
+                    video_output_d_fake_mean += (
+                        output_d_fake.mean().item()
+                        * self.batch_size
+                        / (num_frames - skip_first_frame)
+                    )
 
             if log_this_batch:
                 wandb.log(
