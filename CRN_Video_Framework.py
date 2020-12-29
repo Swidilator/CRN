@@ -419,6 +419,10 @@ class CRNVideoFramework(MastersModel):
             save_dict.update(
                 {"dict_discriminator": self.image_discriminator.state_dict()}
             )
+            if self.use_optical_flow:
+                save_dict.update(
+                    {"dict_flow_discriminator": self.flow_discriminator.state_dict()}
+                )
 
         if epoch >= 0:
             # Todo add support for manager.args["model_save_prefix"]
@@ -447,6 +451,8 @@ class CRNVideoFramework(MastersModel):
             self.feature_encoder.load_state_dict(checkpoint["dict_encoder_decoder"])
         if self.use_discriminators:
             self.image_discriminator.load_state_dict(checkpoint["dict_discriminator"])
+            if self.use_optical_flow:
+                self.flow_discriminator.load_state_dict(checkpoint["dict_flow_discriminator"])
 
     @classmethod
     def load_model_with_embedded_settings(cls, manager: ModelSettingsManager):
