@@ -82,9 +82,11 @@ class CRNVideo(torch.nn.Module):
                     resnet_mode=self.use_resnet_rms,
                     resnet_no_add=False,
                     use_semantic_input=True,
-                    use_image_input=(self.num_prior_frames > 0 and not self.use_twin_network),
+                    use_image_input=(
+                        self.num_prior_frames > 0 and not self.use_twin_network
+                    ),
                     is_flow_output=False,
-                    is_twin_model=self.use_twin_network
+                    is_twin_model=self.use_twin_network,
                 )
             ]
         )
@@ -106,9 +108,11 @@ class CRNVideo(torch.nn.Module):
                     resnet_mode=self.use_resnet_rms,
                     resnet_no_add=False,
                     use_semantic_input=True,
-                    use_image_input=(self.num_prior_frames > 0 and not self.use_twin_network),
+                    use_image_input=(
+                        self.num_prior_frames > 0 and not self.use_twin_network
+                    ),
                     is_twin_model=self.use_twin_network,
-                    is_flow_output=False
+                    is_flow_output=False,
                 )
                 for i in range(1, self.num_rms - 1)
             ]
@@ -134,9 +138,11 @@ class CRNVideo(torch.nn.Module):
                 resnet_mode=self.use_resnet_rms,
                 resnet_no_add=False,
                 use_semantic_input=True,
-                use_image_input=(self.num_prior_frames > 0 and not self.use_twin_network),
+                use_image_input=(
+                    self.num_prior_frames > 0 and not self.use_twin_network
+                ),
                 is_flow_output=self.use_optical_flow and not self.use_twin_network,
-                is_twin_model=self.use_twin_network
+                is_twin_model=self.use_twin_network,
             )
         )
 
@@ -160,7 +166,7 @@ class CRNVideo(torch.nn.Module):
                     use_semantic_input=False,
                     use_image_input=self.num_prior_frames > 0,
                     is_twin_model=True,
-                    is_flow_output=False
+                    is_flow_output=False,
                 )
                 if self.use_twin_network and self.num_prior_frames > 0
                 else nn.Identity()
@@ -186,8 +192,10 @@ class CRNVideo(torch.nn.Module):
                     use_semantic_input=False,
                     use_image_input=self.num_prior_frames > 0,
                     is_flow_output=False,
-                    is_twin_model=True
-                ) if self.use_twin_network else nn.Identity()
+                    is_twin_model=True,
+                )
+                if self.use_twin_network
+                else nn.Identity()
                 for i in range(1, self.num_rms - 1)
             ]
         )
@@ -214,7 +222,7 @@ class CRNVideo(torch.nn.Module):
                 use_semantic_input=False,
                 use_image_input=self.num_prior_frames > 0,
                 is_flow_output=True,
-                is_twin_model=True
+                is_twin_model=True,
             )
             if self.use_twin_network and self.use_optical_flow
             else nn.Identity()

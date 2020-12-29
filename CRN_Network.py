@@ -74,7 +74,7 @@ class CRN(torch.nn.Module):
                     is_twin_model=False,
                     is_flow_output=False,
                     use_image_input=False,
-                    use_semantic_input=True
+                    use_semantic_input=True,
                 )
             ]
         )
@@ -98,7 +98,7 @@ class CRN(torch.nn.Module):
                     is_twin_model=False,
                     is_flow_output=False,
                     use_image_input=False,
-                    use_semantic_input=True
+                    use_semantic_input=True,
                 )
                 for i in range(1, self.num_rms - 1)
             ]
@@ -127,7 +127,7 @@ class CRN(torch.nn.Module):
                 is_twin_model=False,
                 is_flow_output=False,
                 use_image_input=False,
-                use_semantic_input=True
+                use_semantic_input=True,
             )
         )
 

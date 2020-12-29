@@ -24,7 +24,7 @@ class RefinementModule(nn.Module):
         use_semantic_input: bool,
         use_image_input: bool,
         is_flow_output: bool,
-        is_twin_model: bool
+        is_twin_model: bool,
     ):
         super().__init__()
 
@@ -52,11 +52,15 @@ class RefinementModule(nn.Module):
 
         # Total number of input channels
         self.total_semantic_input_channel_count: int = (
-                (semantic_input_channel_count * (num_prior_frames + 1))
-                + feature_encoder_input_channel_count
-                + edge_map_input_channel_count
-                + (prior_conv_channel_count if not self.complex_input_mode else 0)
-                + (self.total_image_input_channel_count if not self.complex_input_mode else 0)
+            (semantic_input_channel_count * (num_prior_frames + 1))
+            + feature_encoder_input_channel_count
+            + edge_map_input_channel_count
+            + (prior_conv_channel_count if not self.complex_input_mode else 0)
+            + (
+                self.total_image_input_channel_count
+                if not self.complex_input_mode
+                else 0
+            )
         )
 
         if self.use_semantic_input:
