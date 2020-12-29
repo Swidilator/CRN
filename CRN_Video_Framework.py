@@ -882,7 +882,7 @@ class CRNVideoFramework(MastersModel):
                     video_loss_g_gan += loss_g_gan.item() * loss_scaler
                     video_loss_g_fm += loss_g_fm.item() * loss_scaler
                     video_output_d_real_mean += (
-                        output_d_real_flow.mean().item() * loss_scaler
+                        output_d_real.mean().item() * loss_scaler
                     )
                     video_output_d_fake_mean += (
                         output_d_fake.mean().item() * loss_scaler
