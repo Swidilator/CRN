@@ -626,9 +626,9 @@ class CRNVideoFramework(MastersModel):
                             )
                         )
 
-                        output_d_real_flow: torch.Tensor
+                        output_d_real: torch.Tensor
                         (
-                            output_d_real_flow,
+                            output_d_real,
                             output_d_real_extra,
                         ) = self.image_discriminator(
                             (
@@ -641,7 +641,7 @@ class CRNVideoFramework(MastersModel):
                         )
                         loss_d_real: torch.Tensor = (
                             self.image_discriminator.calculate_loss(
-                                output_d_real_flow, real_label, self.criterion_D
+                                output_d_real, real_label, self.criterion_D
                             )
                         )
 
@@ -771,15 +771,15 @@ class CRNVideoFramework(MastersModel):
 
                         prior_fake_image_list = [
                             fake_img.detach().clone().clamp(0.0, 1.0),
-                            *prior_fake_image_list[1 : self.num_prior_frames],
+                            *prior_fake_image_list[0 : self.num_prior_frames - 1],
                         ]
                         prior_real_image_list = [
                             real_img.detach().clone(),
-                            *prior_real_image_list[1 : self.num_prior_frames],
+                            *prior_real_image_list[0 : self.num_prior_frames - 1],
                         ]
                         prior_msk_list = [
                             msk.detach(),
-                            *prior_msk_list[1 : self.num_prior_frames],
+                            *prior_msk_list[0 : self.num_prior_frames - 1],
                         ]
 
                         if self.use_optical_flow:
@@ -844,28 +844,25 @@ class CRNVideoFramework(MastersModel):
                             self.torch_gradient_scaler.update()
                 else:
                     loss.backward()
-                    grads = torch.nn.utils.clip_grad_norm_(
+                    torch.nn.utils.clip_grad_norm_(
                         self.crn_video.parameters(), 30
                     )
-                    print("crn_video", grads.item())
                     self.optimizer_crn.step()
 
                     if self.use_discriminators:
                         self.optimizer_D_image.zero_grad()
                         loss_d.backward()
-                        grads = torch.nn.utils.clip_grad_norm_(
+                        torch.nn.utils.clip_grad_norm_(
                             self.image_discriminator.parameters(), 30
                         )
-                        print("image_discriminator", grads.item())
                         self.optimizer_D_image.step()
 
                         if self.use_optical_flow:
                             self.optimizer_D_flow.zero_grad()
                             loss_d_flow.backward()
-                            grads = torch.nn.utils.clip_grad_norm_(
+                            torch.nn.utils.clip_grad_norm_(
                                 self.flow_discriminator.parameters(), 30
                             )
-                            print("flow_discriminator", grads.item())
                             self.optimizer_D_flow.step()
 
                 loss_scaler: float = self.batch_size / (num_frames - skip_first_frame)
