@@ -144,6 +144,10 @@ class CRNVideoFramework(MastersModel):
         models = [self.crn_video]
         if self.use_feature_encodings:
             models.append(self.feature_encoder)
+        if self.use_discriminators:
+            models.append(self.image_discriminator)
+            if self.use_optical_flow:
+                models.append(self.flow_discriminator)
         return tuple(models)
 
     @classmethod

@@ -138,6 +138,8 @@ class CRNFramework(MastersModel):
         models = [self.crn]
         if self.use_feature_encodings:
             models.append(self.feature_encoder)
+        if self.use_discriminators:
+            models.append(self.image_discriminator)
         return tuple(models)
 
     @classmethod
