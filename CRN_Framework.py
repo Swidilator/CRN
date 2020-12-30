@@ -46,6 +46,7 @@ class CRNFramework(MastersModel):
         num_prior_frames: int,
         use_optical_flow: bool,
         prior_frame_seed_type: str,
+        use_mask_for_instances: bool,
         **kwargs,
     ):
         super(CRNFramework, self).__init__(
@@ -69,6 +70,7 @@ class CRNFramework(MastersModel):
             num_prior_frames,
             use_optical_flow,
             prior_frame_seed_type,
+            use_mask_for_instances,
             **kwargs,
         )
         self.model_name: str = "CRN"
@@ -251,8 +253,8 @@ class CRNFramework(MastersModel):
                 self.device,
                 self.model_save_dir,
                 self.use_saved_feature_encodings,
-                use_masks_as_instances=False,
-                num_semantic_classes=self.num_classes,
+                self.use_mask_for_instances,
+                self.num_classes,
             )
             self.feature_encoder = self.feature_encoder.to(self.device)
             if self.use_saved_feature_encodings:

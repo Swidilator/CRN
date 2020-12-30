@@ -53,6 +53,7 @@ class CRNVideoFramework(MastersModel):
         num_prior_frames: int,
         use_optical_flow: bool,
         prior_frame_seed_type: str,
+        use_mask_for_instances: bool,
         **kwargs,
     ):
         super(CRNVideoFramework, self).__init__(
@@ -76,6 +77,7 @@ class CRNVideoFramework(MastersModel):
             num_prior_frames,
             use_optical_flow,
             prior_frame_seed_type,
+            use_mask_for_instances,
             **kwargs,
         )
         self.model_name: str = "CRNVideo"
@@ -250,6 +252,8 @@ class CRNVideoFramework(MastersModel):
         num_feature_encoding_channels: int = self.use_feature_encodings * 3
         num_flow_channels: int = 2
 
+        use_mask_for_instances: bool = True
+
         # Feature Encoder
         if self.use_feature_encodings:
             self.feature_encoder: FeatureEncoder = FeatureEncoder(
@@ -259,8 +263,8 @@ class CRNVideoFramework(MastersModel):
                 self.device,
                 self.model_save_dir,
                 self.use_saved_feature_encodings,
-                use_masks_as_instances=True,
-                num_semantic_classes=self.num_classes,
+                use_mask_for_instances,
+                self.num_classes,
             )
             self.feature_encoder = self.feature_encoder.to(self.device)
             if self.use_saved_feature_encodings:
@@ -456,7 +460,9 @@ class CRNVideoFramework(MastersModel):
         if self.use_discriminators:
             self.image_discriminator.load_state_dict(checkpoint["dict_discriminator"])
             if self.use_optical_flow:
-                self.flow_discriminator.load_state_dict(checkpoint["dict_flow_discriminator"])
+                self.flow_discriminator.load_state_dict(
+                    checkpoint["dict_flow_discriminator"]
+                )
 
     @classmethod
     def load_model_with_embedded_settings(cls, manager: ModelSettingsManager):
@@ -848,9 +854,7 @@ class CRNVideoFramework(MastersModel):
                             self.torch_gradient_scaler.update()
                 else:
                     loss.backward()
-                    torch.nn.utils.clip_grad_norm_(
-                        self.crn_video.parameters(), 30
-                    )
+                    torch.nn.utils.clip_grad_norm_(self.crn_video.parameters(), 30)
                     self.optimizer_crn.step()
 
                     if self.use_discriminators:
