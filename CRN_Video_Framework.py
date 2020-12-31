@@ -12,12 +12,12 @@ from tqdm import tqdm
 import flowiz as fz
 
 from CRN.CRN_Video_Network import CRNVideo
-from CRN.Perceptual_Loss import PerceptualLossNetwork
 from support_scripts.components import (
     FeatureEncoder,
     FlowNetWrapper,
     FullDiscriminator,
     feature_matching_error,
+    PerceptualLossNetwork
 )
 from support_scripts.sampling import SampleDataHolder
 from support_scripts.utils import (

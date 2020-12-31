@@ -1,5 +1,4 @@
 import os
-import sys
 from contextlib import nullcontext
 from itertools import chain
 from typing import Tuple, Any, Union, Optional, List
@@ -11,11 +10,11 @@ from torchvision import transforms
 from tqdm import tqdm
 
 from CRN.CRN_Network import CRN
-from CRN.Perceptual_Loss import PerceptualLossNetwork
 from support_scripts.components import (
     FeatureEncoder,
     FullDiscriminator,
     feature_matching_error,
+    PerceptualLossNetwork
 )
 from support_scripts.utils import MastersModel, ModelSettingsManager, CityScapesDataset
 from support_scripts.sampling import SampleDataHolder
