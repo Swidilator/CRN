@@ -9,8 +9,6 @@ from PIL import ImageFile
 from torchvision import transforms
 from tqdm import tqdm
 
-import flowiz as fz
-
 from CRN.CRN_Video_Network import CRNVideo
 from support_scripts.components import (
     FeatureEncoder,
@@ -26,6 +24,8 @@ from support_scripts.utils import (
     CityScapesDemoVideoDataset,
     CityScapesVideoDataset,
 )
+
+import flowiz as fz
 
 ImageFile.LOAD_TRUNCATED_IMAGES = True
 
@@ -506,6 +506,13 @@ class CRNVideoFramework(MastersModel):
 
     def train(self, **kwargs) -> Tuple[float, Any]:
         self.crn_video.train()
+        if self.use_feature_encodings:
+            self.feature_encoder.train()
+        if self.use_discriminators:
+            self.image_discriminator.train()
+            if self.use_optical_flow:
+                self.flow_discriminator.train()
+
         # If sampling from saved feature encodings, and using a single set of settings
         #  all sampling for a single epoch will have the same settings, but refresh between epochs
         if self.use_feature_encodings and self.use_saved_feature_encodings:
@@ -992,6 +999,10 @@ class CRNVideoFramework(MastersModel):
         self.crn_video.eval()
         if self.use_feature_encodings:
             self.feature_encoder.eval()
+        if self.use_discriminators:
+            self.image_discriminator.eval()
+            if self.use_optical_flow:
+                self.flow_discriminator.eval()
 
         with torch.no_grad():
 

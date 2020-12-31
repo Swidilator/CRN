@@ -441,6 +441,10 @@ class CRNFramework(MastersModel):
 
     def train(self, **kwargs) -> Tuple[float, Any]:
         self.crn.train()
+        if self.use_feature_encodings:
+            self.feature_encoder.train()
+        if self.use_discriminators:
+            self.image_discriminator.train()
 
         current_epoch: int = kwargs["current_epoch"]
 
@@ -644,6 +648,8 @@ class CRNFramework(MastersModel):
         self.crn.eval()
         if self.use_feature_encodings:
             self.feature_encoder.eval()
+        if self.use_discriminators:
+            self.image_discriminator.train()
 
         with torch.no_grad():
             transform: transforms.ToPILImage = transforms.ToPILImage()
