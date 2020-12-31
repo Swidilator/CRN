@@ -487,6 +487,7 @@ class CRNFramework(MastersModel):
                         if self.use_saved_feature_encodings
                         else None,
                         input_dict["img_flipped"],
+                        msk
                     )
                 else:
                     feature_encoding = None
@@ -560,8 +561,8 @@ class CRNFramework(MastersModel):
                         fake_img_normalised.unsqueeze(1), real_img_normalised, msk
                     )
 
-            # Add losses for CRNVideo together, no discriminator loss
-            loss: torch.Tensor = loss_img + loss_g
+                # Add losses for CRNVideo together, no discriminator loss
+                loss: torch.Tensor = loss_img + loss_g
 
             if self.use_amp == "torch":
                 self.optimizer_crn.zero_grad()

@@ -41,7 +41,7 @@ class CRNVideo(torch.nn.Module):
         self.use_edge_map: bool = use_edge_map
         self.use_twin_network: bool = use_twin_network
 
-        self.__NUM_OUTPUT_IMAGE_CHANNELS__: int = 3
+        self.num_output_image_channels: int = 3
 
         if self.use_optical_flow:
             assert (
@@ -129,7 +129,7 @@ class CRNVideo(torch.nn.Module):
                 prior_conv_channel_count=self.rms_conv_channel_settings[
                     self.num_rms - 2
                 ],
-                final_conv_output_channel_count=self.__NUM_OUTPUT_IMAGE_CHANNELS__,
+                final_conv_output_channel_count=self.num_output_image_channels,
                 is_final_module=True,
                 input_height_width=final_image_size,
                 norm_type=self.layer_norm_type,
