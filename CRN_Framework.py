@@ -379,9 +379,14 @@ class CRNFramework(MastersModel):
                 {"dict_encoder_decoder": self.feature_encoder.state_dict()}
             )
         if self.use_discriminators:
-            save_dict.update(
-                {"dict_discriminator": self.image_discriminator.state_dict()}
-            )
+            for i in range(self.num_discriminators):
+                save_dict.update(
+                    {
+                        "dict_discriminator_{num}".format(
+                            num=i
+                        ): self.image_discriminator.discriminators[i].state_dict()
+                    }
+                )
 
         if epoch >= 0:
             # Todo add support for manager.args["model_save_prefix"]
@@ -411,7 +416,16 @@ class CRNFramework(MastersModel):
         if self.use_feature_encodings:
             self.feature_encoder.load_state_dict(checkpoint["dict_encoder_decoder"])
         if self.use_discriminators:
-            self.image_discriminator.load_state_dict(checkpoint["dict_discriminator"])
+            if "dict_discriminator" in checkpoint:
+                self.image_discriminator.load_state_dict(
+                    checkpoint["dict_discriminator"], strict=False
+                )
+            else:
+                for i in range(self.num_discriminators):
+                    if "dict_discriminator_{num}".format(num=i) in checkpoint:
+                        self.image_discriminator.discriminators[i].load_state_dict(
+                            checkpoint["dict_discriminator_{num}".format(num=i)]
+                        )
 
     @classmethod
     def load_model_with_embedded_settings(cls, manager: ModelSettingsManager):
