@@ -15,7 +15,7 @@ from support_scripts.components import (
     FlowNetWrapper,
     FullDiscriminator,
     feature_matching_error,
-    PerceptualLossNetwork
+    PerceptualLossNetwork,
 )
 from support_scripts.sampling import SampleDataHolder
 from support_scripts.utils import (

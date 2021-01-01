@@ -14,7 +14,7 @@ from support_scripts.components import (
     FeatureEncoder,
     FullDiscriminator,
     feature_matching_error,
-    PerceptualLossNetwork
+    PerceptualLossNetwork,
 )
 from support_scripts.utils import MastersModel, ModelSettingsManager, CityScapesDataset
 from support_scripts.sampling import SampleDataHolder
@@ -490,7 +490,7 @@ class CRNFramework(MastersModel):
                         if self.use_saved_feature_encodings
                         else None,
                         input_dict["img_flipped"],
-                        msk
+                        msk,
                     )
                 else:
                     feature_encoding = None

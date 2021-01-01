@@ -1,6 +1,6 @@
 import torch
 import torch.nn as nn
-from typing import List
+from typing import List, Optional
 
 from support_scripts.components import RMBlock, ResNetBlock, Block
 
@@ -267,9 +267,9 @@ class RefinementModule(nn.Module):
 
             # Processing intended for final rm
 
-        out_img = None
-        out_flow = None
-        out_mask = None
+        out_img: Optional[torch.Tensor] = None
+        out_flow: Optional[torch.Tensor] = None
+        out_mask: Optional[torch.Tensor] = None
 
         if self.is_final_module:
             # if self.resnet_mode:
