@@ -369,6 +369,7 @@ class CRNVideoFramework(MastersModel):
                         + num_edge_map_channels
                         + num_flow_channels
                         + (self.num_prior_frames * self.num_classes)
+                        + (self.num_prior_frames * num_image_channels)
                     )
 
                     self.flow_discriminator: FullDiscriminator = FullDiscriminator(
@@ -726,6 +727,7 @@ class CRNVideoFramework(MastersModel):
                                     edge_map if self.use_edge_map else None,
                                     fake_flow.detach(),
                                     *prior_msk_list,
+                                    *prior_fake_image_list,
                                 )
                             )
                             loss_d_fake_flow: torch.Tensor = (
@@ -744,6 +746,7 @@ class CRNVideoFramework(MastersModel):
                                     edge_map if self.use_edge_map else None,
                                     real_flow.permute(0, 3, 1, 2),
                                     *prior_msk_list,
+                                    *prior_real_image_list,
                                 )
                             )
                             loss_d_real_flow: torch.Tensor = (
@@ -763,6 +766,7 @@ class CRNVideoFramework(MastersModel):
                                     edge_map if self.use_edge_map else None,
                                     fake_flow,
                                     *prior_msk_list,
+                                    *prior_fake_image_list,
                                 )
                             )
                             loss_g_gan_flow: torch.Tensor = (
