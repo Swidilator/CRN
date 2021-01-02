@@ -54,32 +54,15 @@ class CRNVideoFramework(MastersModel):
         use_optical_flow: bool,
         prior_frame_seed_type: str,
         use_mask_for_instances: bool,
+        video_frame_offset: Union[int, str],
         **kwargs,
     ):
-        super(CRNVideoFramework, self).__init__(
-            device,
-            dataset_path,
-            input_image_height_width,
-            batch_size,
-            use_all_classes,
-            num_data_workers,
-            training_subset_size,
-            flip_training_images,
-            use_tanh,
-            use_input_image_noise,
-            sample_only,
-            use_amp,
-            log_every_n_steps,
-            model_save_dir,
-            image_save_dir,
-            starting_epoch,
-            num_frames_per_video,
-            num_prior_frames,
-            use_optical_flow,
-            prior_frame_seed_type,
-            use_mask_for_instances,
-            **kwargs,
-        )
+        super(CRNVideoFramework, self).__init__(device, dataset_path, input_image_height_width, batch_size,
+                                                use_all_classes, num_data_workers, training_subset_size,
+                                                flip_training_images, use_tanh, use_input_image_noise, sample_only,
+                                                use_amp, log_every_n_steps, model_save_dir, image_save_dir,
+                                                starting_epoch, num_frames_per_video, num_prior_frames,
+                                                use_optical_flow, **kwargs)
         self.model_name: str = "CRNVideo"
 
         try:
@@ -211,7 +194,7 @@ class CRNVideoFramework(MastersModel):
             subset_size=0,
             output_image_height_width=self.input_image_height_width,
             num_frames=self.num_frames_per_video,
-            frame_offset="random",
+            frame_offset=self.video_frame_offset,
         )
 
         self.data_loader_val: torch.utils.data.DataLoader = torch.utils.data.DataLoader(
@@ -222,7 +205,7 @@ class CRNVideoFramework(MastersModel):
             pin_memory=True,
         )
 
-        self.__data_set_video__ = CityScapesDemoVideoDataset(
+        self.__data_set_demovideo__ = CityScapesDemoVideoDataset(
             output_image_height_width=self.input_image_height_width,
             root=self.dataset_path,
             split="demoVideo",
@@ -233,15 +216,8 @@ class CRNVideoFramework(MastersModel):
             num_frames=16,
         )
 
-        self.data_loader_video: torch.utils.data.DataLoader = (
-            torch.utils.data.DataLoader(
-                self.__data_set_video__,
-                batch_size=self.batch_size,
-                shuffle=False,
-                num_workers=self.num_data_workers,
-                pin_memory=True,
-            )
-        )
+        if self.sample_only:
+            self.data_set_fvd: CityScapesVideoDataset = self.__data_set_val__
 
         self.num_classes = self.__data_set_train__.num_output_segmentation_classes
 

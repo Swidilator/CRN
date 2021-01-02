@@ -16,7 +16,13 @@ from support_scripts.components import (
     feature_matching_error,
     PerceptualLossNetwork,
 )
-from support_scripts.utils import MastersModel, ModelSettingsManager, CityScapesDataset
+from support_scripts.utils import (
+    MastersModel,
+    ModelSettingsManager,
+    CityScapesStandardDataset,
+    CityScapesVideoDataset,
+    CityScapesDemoVideoDataset,
+)
 from support_scripts.sampling import SampleDataHolder
 
 ImageFile.LOAD_TRUNCATED_IMAGES = True
@@ -46,32 +52,14 @@ class CRNFramework(MastersModel):
         use_optical_flow: bool,
         prior_frame_seed_type: str,
         use_mask_for_instances: bool,
+        video_frame_offset: Union[int, str],
         **kwargs,
     ):
-        super(CRNFramework, self).__init__(
-            device,
-            dataset_path,
-            input_image_height_width,
-            batch_size,
-            use_all_classes,
-            num_data_workers,
-            training_subset_size,
-            flip_training_images,
-            use_tanh,
-            use_input_image_noise,
-            sample_only,
-            use_amp,
-            log_every_n_steps,
-            model_save_dir,
-            image_save_dir,
-            starting_epoch,
-            num_frames_per_video,
-            num_prior_frames,
-            use_optical_flow,
-            prior_frame_seed_type,
-            use_mask_for_instances,
-            **kwargs,
-        )
+        super(CRNFramework, self).__init__(device, dataset_path, input_image_height_width, batch_size, use_all_classes,
+                                           num_data_workers, training_subset_size, flip_training_images, use_tanh,
+                                           use_input_image_noise, sample_only, use_amp, log_every_n_steps,
+                                           model_save_dir, image_save_dir, starting_epoch, num_frames_per_video,
+                                           num_prior_frames, use_optical_flow, **kwargs)
         self.model_name: str = "CRN"
 
         try:
@@ -175,7 +163,7 @@ class CRNFramework(MastersModel):
 
     def __set_data_loader__(self, **kwargs):
 
-        self.__data_set_train__ = CityScapesDataset(
+        self.__data_set_train__ = CityScapesStandardDataset(
             output_image_height_width=self.input_image_height_width,
             root=self.dataset_path,
             split="train",
@@ -196,7 +184,7 @@ class CRNFramework(MastersModel):
             )
         )
 
-        self.__data_set_val__ = CityScapesDataset(
+        self.__data_set_val__ = CityScapesStandardDataset(
             output_image_height_width=self.input_image_height_width,
             root=self.dataset_path,
             split="val",
@@ -214,7 +202,7 @@ class CRNFramework(MastersModel):
             num_workers=self.num_data_workers,
         )
 
-        self.__data_set_video__ = CityScapesDataset(
+        self.__data_set_demovideo__ = CityScapesDemoVideoDataset(
             output_image_height_width=self.input_image_height_width,
             root=self.dataset_path,
             split="demoVideo",
@@ -222,18 +210,19 @@ class CRNFramework(MastersModel):
             subset_size=0,
             noise=False,
             specific_model="CRN",
-            generated_data=True,
+            num_frames=16,
         )
 
-        self.data_loader_video: torch.utils.data.DataLoader = (
-            torch.utils.data.DataLoader(
-                self.__data_set_video__,
-                batch_size=self.batch_size,
-                shuffle=False,
-                num_workers=self.num_data_workers,
-                pin_memory=True,
+        if self.sample_only:
+            self.data_set_fvd: CityScapesVideoDataset = CityScapesVideoDataset(
+                root=self.dataset_path + "/sequence",
+                split="val",
+                should_flip=False,
+                subset_size=0,
+                output_image_height_width=self.input_image_height_width,
+                num_frames=self.num_frames_per_video,
+                frame_offset=self.video_frame_offset,
             )
-        )
 
         self.num_classes = self.__data_set_train__.num_output_segmentation_classes
 
@@ -561,7 +550,7 @@ class CRNFramework(MastersModel):
 
                     # Calculate loss on final network output image
                     loss_img: torch.Tensor = self.loss_net(
-                        fake_img_normalised.unsqueeze(1), real_img_normalised, msk
+                        fake_img_normalised, real_img_normalised, msk
                     )
 
                 # Add losses for CRNVideo together, no discriminator loss

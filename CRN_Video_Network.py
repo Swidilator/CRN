@@ -24,6 +24,7 @@ class CRNVideo(torch.nn.Module):
         use_optical_flow: bool,
         use_edge_map: bool,
         use_twin_network: bool,
+        num_output_images: int,
     ):
         super(CRNVideo, self).__init__()
 
@@ -40,8 +41,14 @@ class CRNVideo(torch.nn.Module):
         self.use_optical_flow: bool = use_optical_flow
         self.use_edge_map: bool = use_edge_map
         self.use_twin_network: bool = use_twin_network
+        self.num_output_images: int = num_output_images
 
         self.num_output_image_channels: int = 3
+
+        if self.num_output_images > 1:
+            assert (
+                self.num_prior_frames == 0 and self.use_optical_flow is False
+            ), "num_prior_frames > 0 required if use_optical_flow == True"
 
         if self.use_optical_flow:
             assert (
@@ -129,7 +136,8 @@ class CRNVideo(torch.nn.Module):
                 prior_conv_channel_count=self.rms_conv_channel_settings[
                     self.num_rms - 2
                 ],
-                final_conv_output_channel_count=self.num_output_image_channels,
+                final_conv_output_channel_count=self.num_output_image_channels
+                * self.num_output_images,
                 is_final_module=True,
                 input_height_width=final_image_size,
                 norm_type=self.layer_norm_type,
@@ -312,8 +320,6 @@ class CRNVideo(torch.nn.Module):
                     prev_images,
                     prev_masks,
                 )
-                # output_flow: torch.Tensor = self.flow_conv_out(output_flow_and_mask)
-                # output_mask: torch.Tensor = self.mask_conv_out(output_flow_and_mask)
                 output_flow: Optional[torch.Tensor] = output_flow_and_mask["out_flow"]
                 output_mask: Optional[torch.Tensor] = output_flow_and_mask["out_mask"]
 
@@ -327,6 +333,12 @@ class CRNVideo(torch.nn.Module):
         else:
             output = output_gen
             output_gen = None
+
+        if self.num_output_images > 1:
+            a, b, c = torch.chunk(output.unsqueeze(2), 3, 1)
+            output = torch.cat((a, b, c), 2)
+        else:
+            output = output.unsqueeze(1)
 
         return (
             output,

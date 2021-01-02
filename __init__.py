@@ -1,2 +1,1 @@
-from CRN.CRN_Framework import CRNFramework
-from CRN.CRN_Video_Framework import CRNVideoFramework
+from CRN.CRN_Video_Network import CRNVideo
