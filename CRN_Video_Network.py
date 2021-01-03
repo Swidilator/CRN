@@ -45,6 +45,7 @@ class CRNVideo(torch.nn.Module):
 
         self.num_output_image_channels: int = 3
 
+        # Checking settings are valid
         if self.num_output_images > 1:
             assert (
                 self.num_prior_frames == 0 and self.use_optical_flow is False
@@ -55,6 +56,7 @@ class CRNVideo(torch.nn.Module):
                 self.num_prior_frames > 0
             ), "num_prior_frames > 0 required if use_optical_flow == True"
 
+        # To manage memory usage, number of conv filters in each RM decreases over time
         base_rms_conv_channel_settings: list = [
             1024,
             1024,
@@ -66,12 +68,15 @@ class CRNVideo(torch.nn.Module):
             128,
             32,
         ]
+        # Modify settings to match input value for max number of conv filters
         self.rms_conv_channel_settings: list = [
             min(self.num_inner_channels, x) for x in base_rms_conv_channel_settings
         ]
 
+        # Calculate number of RMs based on output image size
         self.num_rms: int = int(log2(final_image_size[0])) - 1
 
+        # Create and pupulate lists with RMs
         self.rms_list: nn.ModuleList = nn.ModuleList(
             [
                 RefinementModule(
@@ -291,7 +296,7 @@ class CRNVideo(torch.nn.Module):
 
             output_list.append(output_i)
 
-        # Generated image, use final gen rm
+        # Generated image, use final gen RM
         output_final_rms_list: dict = self.rms_list[-1](
             msk,
             output_list[-1],
@@ -306,7 +311,7 @@ class CRNVideo(torch.nn.Module):
         output_mask = None
         output_warped = None
 
-        # Optical flow and merge mask, use final flow rm
+        # Optical flow and merge mask, use final flow RM
         if self.use_optical_flow:
             if not self.use_twin_network:
                 output_flow: Optional[torch.Tensor] = output_final_rms_list["out_flow"]
@@ -334,6 +339,7 @@ class CRNVideo(torch.nn.Module):
             output = output_gen
             output_gen = None
 
+        # For multiple output images, split final output and put back together as separate images.
         if self.num_output_images > 1:
             a, b, c = torch.chunk(output.unsqueeze(2), 3, 1)
             output = torch.cat((a, b, c), 2)

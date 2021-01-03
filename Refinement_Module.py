@@ -48,9 +48,10 @@ class RefinementModule(nn.Module):
 
         self.is_first_module: bool = self.prior_conv_channel_count == 0
 
+        # This states that the inputs are handled differently to the standard model
         self.complex_input_mode: bool = self.is_twin_model or self.resnet_mode
 
-        # Total number of input channels
+        # Total number of input channels, semantic only if using a twin network
         self.total_semantic_input_channel_count: int = (
             (semantic_input_channel_count * (num_prior_frames + 1))
             + feature_encoder_input_channel_count
@@ -109,6 +110,7 @@ class RefinementModule(nn.Module):
                 num_conv_groups=1,
             )
             if self.complex_input_mode:
+                # Extra processing if adding inputs from first layers together
                 self.rm_block_3 = RMBlock(
                     self.base_conv_channel_count,
                     self.base_conv_channel_count,
@@ -131,7 +133,7 @@ class RefinementModule(nn.Module):
             )
 
         if self.is_final_module:
-            # if self.resnet_mode:
+            # Raw resnet outputs cannot be used as is
             self.rm_final_processing_list: nn.ModuleList = nn.ModuleList()
             if self.num_resnet_processing_rms > 0:
                 for i in range(self.num_resnet_processing_rms):
@@ -146,6 +148,7 @@ class RefinementModule(nn.Module):
                         )
                     )
 
+            # In the final RM, process the outputs to create images.
             if self.final_conv_output_channel_count > 0:
                 self.final_conv = nn.Conv2d(
                     self.base_conv_channel_count,
@@ -181,13 +184,6 @@ class RefinementModule(nn.Module):
                     ),
                     nn.Sigmoid(),
                 )
-
-        # # Compatibility with old saves, resnet does not have compat
-        # if not self.resnet_mode and self.use_semantic_input:
-        #     self.conv_1 = self.rm_block_1_semantic.conv_1
-        #     self.norm_1 = self.rm_block_1_semantic.norm_1
-        #     self.conv_2 = self.rm_block_2.conv_1
-        #     self.norm_2 = self.rm_block_2.norm_1
 
     def forward(
         self,
@@ -247,6 +243,7 @@ class RefinementModule(nn.Module):
             mask: torch.Tensor
             x = None
 
+        # Use extra prior layer processor if desired
         if not self.is_first_module and self.complex_input_mode:
             x_prior_layers: torch.Tensor = self.rm_block_1_prior_layer(prior_layers)
             x = x_prior_layers + x if x is not None else x_prior_layers
@@ -262,6 +259,7 @@ class RefinementModule(nn.Module):
             if self.complex_input_mode:
                 x = self.rm_block_3(x, relu_loc="after")
         else:
+            # Use resnet block
             x = self.resnet_block_1(x)
             x = self.resnet_block_2(x)
 
@@ -272,7 +270,6 @@ class RefinementModule(nn.Module):
         out_mask: Optional[torch.Tensor] = None
 
         if self.is_final_module:
-            # if self.resnet_mode:
             for item in self.rm_final_processing_list:
                 if self.resnet_mode:
                     x = item(x, relu_loc="before")
