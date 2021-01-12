@@ -25,6 +25,7 @@ class CRNVideo(torch.nn.Module):
         use_edge_map: bool,
         use_twin_network: bool,
         num_output_images: int,
+        normalised_prior_frames: bool,
     ):
         super(CRNVideo, self).__init__()
 
@@ -42,6 +43,7 @@ class CRNVideo(torch.nn.Module):
         self.use_edge_map: bool = use_edge_map
         self.use_twin_network: bool = use_twin_network
         self.num_output_images: int = num_output_images
+        self.normalised_prior_frames: bool = normalised_prior_frames
 
         self.num_output_image_channels: int = 3
 
@@ -330,7 +332,9 @@ class CRNVideo(torch.nn.Module):
 
             # Warp prior frame with flow
             output_warped: Optional[torch.Tensor] = FlowNetWrapper.resample(
-                prev_images[:, 0:3], output_flow, self.grid
+                prev_images[:, 0:3] + (self.normalised_prior_frames * 0.5),
+                output_flow,
+                self.grid,
             )
             output: torch.Tensor = (output_mask * output_gen) + (
                 (torch.ones_like(output_mask) - output_mask) * output_warped
