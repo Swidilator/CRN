@@ -26,6 +26,7 @@ class CRNVideo(torch.nn.Module):
         use_twin_network: bool,
         num_output_images: int,
         normalised_prior_frames: bool,
+        use_simple_warped_image_merging: bool,
     ):
         super(CRNVideo, self).__init__()
 
@@ -44,6 +45,7 @@ class CRNVideo(torch.nn.Module):
         self.use_twin_network: bool = use_twin_network
         self.num_output_images: int = num_output_images
         self.normalised_prior_frames: bool = normalised_prior_frames
+        self.use_simple_warped_image_merging: bool = use_simple_warped_image_merging
 
         self.num_output_image_channels: int = 3
 
@@ -101,6 +103,7 @@ class CRNVideo(torch.nn.Module):
                     ),
                     is_flow_output=False,
                     is_twin_model=self.use_twin_network,
+                    output_flow_mask=False
                 )
             ]
         )
@@ -127,6 +130,7 @@ class CRNVideo(torch.nn.Module):
                     ),
                     is_twin_model=self.use_twin_network,
                     is_flow_output=False,
+                    output_flow_mask=False
                 )
                 for i in range(1, self.num_rms - 1)
             ]
@@ -158,6 +162,7 @@ class CRNVideo(torch.nn.Module):
                 ),
                 is_flow_output=self.use_optical_flow and not self.use_twin_network,
                 is_twin_model=self.use_twin_network,
+                output_flow_mask=False
             )
         )
 
@@ -182,6 +187,7 @@ class CRNVideo(torch.nn.Module):
                     use_image_input=self.num_prior_frames > 0,
                     is_twin_model=True,
                     is_flow_output=False,
+                    output_flow_mask=False
                 )
                 if self.use_twin_network and self.num_prior_frames > 0
                 else nn.Identity()
@@ -208,6 +214,7 @@ class CRNVideo(torch.nn.Module):
                     use_image_input=self.num_prior_frames > 0,
                     is_flow_output=False,
                     is_twin_model=True,
+                    output_flow_mask=False
                 )
                 if self.use_twin_network
                 else nn.Identity()
@@ -238,6 +245,7 @@ class CRNVideo(torch.nn.Module):
                 use_image_input=self.num_prior_frames > 0,
                 is_flow_output=True,
                 is_twin_model=True,
+                output_flow_mask=not self.use_simple_warped_image_merging
             )
             if self.use_twin_network and self.use_optical_flow
             else nn.Identity()
@@ -317,7 +325,8 @@ class CRNVideo(torch.nn.Module):
         if self.use_optical_flow:
             if not self.use_twin_network:
                 output_flow: Optional[torch.Tensor] = output_final_rms_list["out_flow"]
-                output_mask: Optional[torch.Tensor] = output_final_rms_list["out_mask"]
+                if not self.use_simple_warped_image_merging:
+                    output_mask: Optional[torch.Tensor] = output_final_rms_list["out_mask"]
             else:
                 output_flow_and_mask = self.rms_list_twin[-1](
                     msk,
@@ -328,7 +337,8 @@ class CRNVideo(torch.nn.Module):
                     prev_masks,
                 )
                 output_flow: Optional[torch.Tensor] = output_flow_and_mask["out_flow"]
-                output_mask: Optional[torch.Tensor] = output_flow_and_mask["out_mask"]
+                if not self.use_simple_warped_image_merging:
+                    output_mask: Optional[torch.Tensor] = output_flow_and_mask["out_mask"]
 
             # Warp prior frame with flow
             output_warped: Optional[torch.Tensor] = FlowNetWrapper.resample(
@@ -336,9 +346,12 @@ class CRNVideo(torch.nn.Module):
                 output_flow,
                 self.grid,
             )
-            output: torch.Tensor = (output_mask * output_gen) + (
-                (torch.ones_like(output_mask) - output_mask) * output_warped
-            )
+            if not self.use_simple_warped_image_merging:
+                output: torch.Tensor = (output_mask * output_gen) + (
+                    (torch.ones_like(output_mask) - output_mask) * output_warped
+                )
+            else:
+                output: torch.Tensor = (output_gen + output_warped) / 2
         else:
             output = output_gen
             output_gen = None

@@ -25,6 +25,7 @@ class RefinementModule(nn.Module):
         use_image_input: bool,
         is_flow_output: bool,
         is_twin_model: bool,
+        output_flow_mask: bool,
     ):
         super().__init__()
 
@@ -40,6 +41,7 @@ class RefinementModule(nn.Module):
         self.is_flow_output: bool = is_flow_output
         self.is_final_module: bool = is_final_module
         self.base_conv_channel_count: int = base_conv_channel_count
+        self.output_flow_mask: bool = output_flow_mask
 
         # Total number of input channels
         self.total_image_input_channel_count: int = num_prior_frames * 3
@@ -173,17 +175,18 @@ class RefinementModule(nn.Module):
                     ),
                 )
 
-                # Conv for generating merge mask
-                self.mask_conv_out: nn.Sequential = nn.Sequential(
-                    nn.ReflectionPad2d(3),
-                    nn.Conv2d(
-                        self.base_conv_channel_count,
-                        1,
-                        kernel_size=7,
-                        padding=0,
-                    ),
-                    nn.Sigmoid(),
-                )
+                if self.output_flow_mask:
+                    # Conv for generating merge mask
+                    self.mask_conv_out: nn.Sequential = nn.Sequential(
+                        nn.ReflectionPad2d(3),
+                        nn.Conv2d(
+                            self.base_conv_channel_count,
+                            1,
+                            kernel_size=7,
+                            padding=0,
+                        ),
+                        nn.Sigmoid(),
+                    )
 
     def forward(
         self,
@@ -279,7 +282,8 @@ class RefinementModule(nn.Module):
                 out_img = self.final_conv(x)
             if self.is_flow_output:
                 out_flow = self.flow_conv_out(x)
-                out_mask = self.mask_conv_out(x)
+                if self.output_flow_mask:
+                    out_mask = self.mask_conv_out(x)
 
         output_dict: dict = {
             "x": x,
