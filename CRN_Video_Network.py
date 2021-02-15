@@ -103,7 +103,7 @@ class CRNVideo(torch.nn.Module):
                     ),
                     is_flow_output=False,
                     is_twin_model=self.use_twin_network,
-                    output_flow_mask=False
+                    output_flow_mask=False,
                 )
             ]
         )
@@ -130,7 +130,7 @@ class CRNVideo(torch.nn.Module):
                     ),
                     is_twin_model=self.use_twin_network,
                     is_flow_output=False,
-                    output_flow_mask=False
+                    output_flow_mask=False,
                 )
                 for i in range(1, self.num_rms - 1)
             ]
@@ -162,7 +162,7 @@ class CRNVideo(torch.nn.Module):
                 ),
                 is_flow_output=self.use_optical_flow and not self.use_twin_network,
                 is_twin_model=self.use_twin_network,
-                output_flow_mask=False
+                output_flow_mask=False,
             )
         )
 
@@ -187,7 +187,7 @@ class CRNVideo(torch.nn.Module):
                     use_image_input=self.num_prior_frames > 0,
                     is_twin_model=True,
                     is_flow_output=False,
-                    output_flow_mask=False
+                    output_flow_mask=False,
                 )
                 if self.use_twin_network and self.num_prior_frames > 0
                 else nn.Identity()
@@ -214,7 +214,7 @@ class CRNVideo(torch.nn.Module):
                     use_image_input=self.num_prior_frames > 0,
                     is_flow_output=False,
                     is_twin_model=True,
-                    output_flow_mask=False
+                    output_flow_mask=False,
                 )
                 if self.use_twin_network
                 else nn.Identity()
@@ -245,7 +245,7 @@ class CRNVideo(torch.nn.Module):
                 use_image_input=self.num_prior_frames > 0,
                 is_flow_output=True,
                 is_twin_model=True,
-                output_flow_mask=not self.use_simple_warped_image_merging
+                output_flow_mask=not self.use_simple_warped_image_merging,
             )
             if self.use_twin_network and self.use_optical_flow
             else nn.Identity()
@@ -326,7 +326,9 @@ class CRNVideo(torch.nn.Module):
             if not self.use_twin_network:
                 output_flow: Optional[torch.Tensor] = output_final_rms_list["out_flow"]
                 if not self.use_simple_warped_image_merging:
-                    output_mask: Optional[torch.Tensor] = output_final_rms_list["out_mask"]
+                    output_mask: Optional[torch.Tensor] = output_final_rms_list[
+                        "out_mask"
+                    ]
             else:
                 output_flow_and_mask = self.rms_list_twin[-1](
                     msk,
@@ -338,7 +340,9 @@ class CRNVideo(torch.nn.Module):
                 )
                 output_flow: Optional[torch.Tensor] = output_flow_and_mask["out_flow"]
                 if not self.use_simple_warped_image_merging:
-                    output_mask: Optional[torch.Tensor] = output_flow_and_mask["out_mask"]
+                    output_mask: Optional[torch.Tensor] = output_flow_and_mask[
+                        "out_mask"
+                    ]
 
             # Warp prior frame with flow
             output_warped: Optional[torch.Tensor] = FlowNetWrapper.resample(
